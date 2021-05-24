@@ -92,8 +92,9 @@ func (g *boxLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 			continue
 		}
 
-		width := child.MinSize().Width
-		height := child.MinSize().Height
+		childMinSize := child.MinSize()
+		width := childMinSize.Width
+		height := childMinSize.Height
 
 		if g.isSpacer(child) {
 			if g.horizontal {
@@ -137,8 +138,10 @@ func (g *boxLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 				minSize.Width += theme.Padding()
 			}
 		} else {
-			minSize.Width = fyne.Max(child.MinSize().Width, minSize.Width)
-			minSize.Height += child.MinSize().Height
+			childMinSize := child.MinSize()
+
+			minSize.Width = fyne.Max(childMinSize.Width, minSize.Width)
+			minSize.Height += childMinSize.Height
 			if addPadding {
 				minSize.Height += theme.Padding()
 			}
