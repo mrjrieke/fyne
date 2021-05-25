@@ -76,6 +76,7 @@ func (g *boxLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	}
 
 	x, y := float32(0), float32(0)
+	
 	var extra float32
 	if g.horizontal {
 		extra = size.Width - total - (theme.Padding() * float32(len(objects)-len(spacers)-1))
@@ -104,7 +105,12 @@ func (g *boxLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 			}
 			continue
 		}
-		child.Move(fyne.NewPos(x, y))
+		pos := child.Position()
+		if g.horizontal && (pos.X > 0 || pos.Y > 0) {
+			child.Move(fyne.NewPos(pos.X, pos.Y + y))
+		} else {
+			child.Move(fyne.NewPos(x, y))
+		}
 
 		if g.horizontal {
 			x += theme.Padding() + width
