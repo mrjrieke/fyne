@@ -20,12 +20,18 @@ type Text struct {
 	Text      string         // The string content of this Text
 	TextSize  float32        // Size of the text - if the Canvas scale is 1.0 this will be equivalent to point size
 	TextStyle fyne.TextStyle // The style of the text content
+	TextSizeCache *fyne.Size
+	EnableTextCache bool
 }
 
 // MinSize returns the minimum size of this text object based on its font size and content.
 // This is normally determined by the render implementation.
 func (t *Text) MinSize() fyne.Size {
-	return fyne.MeasureText(t.Text, t.TextSize, t.TextStyle)
+	if !t.EnableTextCache || t.TextSizeCache == nil {
+		textSize := fyne.MeasureText(t.Text, t.TextSize, t.TextStyle)
+		t.TextSizeCache = &textSize
+    }
+    return *t.TextSizeCache
 }
 
 // SetMinSize has no effect as the smallest size this canvas object can be is based on its font size and content.

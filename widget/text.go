@@ -270,9 +270,11 @@ func (r *textRenderer) MinSize() fyne.Size {
 	r.provider.propertyLock.RUnlock()
 
 	for ; i < count; i++ {
-		min := texts[i].MinSize()
+		var min fyne.Size
 		if texts[i].Text == "" {
 			min = charMinSize
+		} else {
+			min = texts[i].MinSize()
 		}
 		if wrap == fyne.TextWrapOff {
 			width = fyne.Max(width, min.Width)

@@ -465,11 +465,11 @@ func (e *Entry) SetText(text string) {
 // Tapped is called when this entry has been tapped so we should update the cursor position.
 //
 // Implements: fyne.Tappable
-func (e *Entry) Tapped(ev *fyne.PointEvent) {
+func (e *Entry) Tapped(pe *fyne.PointEvent) {
 	if fyne.CurrentDevice().IsMobile() && e.selecting {
 		e.selecting = false
 	}
-	e.updateMousePointer(ev, false)
+	e.updateMousePointer(pe, false)
 }
 
 // TappedSecondary is called when right or alternative tap is invoked.
@@ -1397,8 +1397,10 @@ func (r *entryContentRenderer) Refresh() {
 	r.moveCursor()
 
 	for _, selection := range selections {
-		selection.(*canvas.Rectangle).Hidden = !r.content.entry.focused
-		selection.(*canvas.Rectangle).FillColor = theme.PrimaryColor()
+		if _, ok := selection.(*canvas.Rectangle); ok {
+			selection.(*canvas.Rectangle).Hidden = !r.content.entry.focused && !r.content.entry.disabled
+			selection.(*canvas.Rectangle).FillColor = theme.PrimaryColor()
+		}
 	}
 
 	canvas.Refresh(r.content)
