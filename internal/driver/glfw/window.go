@@ -816,6 +816,12 @@ func (w *window) mouseClicked(_ *glfw.Window, btn glfw.MouseButton, action glfw.
 			w.mousePressed = co
 			w.mouseLock.Unlock()
 		} else if action == glfw.Release {
+			if wid, ok := co.(fyne.Tappable); ok && co == w.mousePressed {
+				// TODO: This is a big hack and should be handled by mouseClickedHandleTapDoubleTap
+				// But that doesn't work for me...  :(
+				w.QueueEvent(func() { wid.Tapped(ev) })
+				return
+			}
 			if co == mousePressed {
 				if button == desktop.MouseButtonSecondary && altTap {
 					w.QueueEvent(func() { co.(fyne.SecondaryTappable).TappedSecondary(ev) })
