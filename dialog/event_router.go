@@ -19,41 +19,73 @@ const (
 )
 
 const (
-	TickerContent      string = "TickerContent"
-	SearchQueryContent string = "SearchQueryContent"
-	PageContent        string = "PageContent"
+	TickerContent        string = "TickerContent"
+	TickerSearchContent  string = "TickerSearchContent"
+	SearchQueryContent   string = "SearchQueryContent"
+	PageContent          string = "PageContent"
 )
 
 type TagType int
 
 type TextTag struct {
-	StartIndex int
-	EndIndex   int // Optional -- some tag values are in the text already like CharacterQuote
+	LeaderIndex int
+	ContentIndex int
+	TagLength   int // Optional -- some tag values are in the text already like CharacterQuote
 	TagValue   string
 	TagType    TagType
 }
 
+// TextStack is a search result returned by the search engine.
 type TextStack struct {
 	Body     strings.Builder
 	TextTags []TextTag
 }
 
+type SearchEnvelope struct {
+	SearchQuery string
+	QueryType   string
+	SelectionStack []string // Stack of selections
+	                        // This is a sort of context of entries the user
+							// has selected in the drilldown.
+//	SelectionDepth int // Indicates current user 'selection level'  0 is top
+	SearchResult *TextStack
+}
+
 // ContentEvent defines the parameters of a content event
 type ContentEvent struct {
+	SourceWidgetId  uint32
+	DestinationWidgetIds []uint32
 	ContentAction string
 	ContentType   string
 	Content       *TextStack
 }
 
+// ContentEvent defines the parameters of a content event
+type TiniPointEvent struct {
+	PointEvent *fyne.PointEvent
+	SourceWidgetId  uint32
+	DestinationWidgetIds []uint32
+}
+
 type ContentConsumer interface {
+	GetId() uint32
 	ContentChanged(*ContentEvent)
 	GetSelected(*fyne.PointEvent) string
 }
 
 type TappedConsumer interface {
+	GetId() uint32
 	IsNavigationComponent() bool
 	Tapped(*fyne.PointEvent)
 	TappedSecondary(*fyne.PointEvent)
+	Visible() bool
+	// DoubleTapped(*fyne.PointEvent)
+}
+
+type RouterTappedConsumer interface {
+	IsNavigationComponent() bool
+	Tapped(*TiniPointEvent)
+	TappedSecondary(*TiniPointEvent)
 	Visible() bool
 	// DoubleTapped(*fyne.PointEvent)
 }
@@ -72,7 +104,7 @@ type DraggedConsumer interface {
 // EventConsumer describes an event consumer
 type EventRouter interface {
 	ContentConsumer
-	TappedConsumer
+	RouterTappedConsumer
 	MouseConsumer
 	DraggedConsumer
 	AddConsumers(...interface{})
