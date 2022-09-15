@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/josephspurrier/goversioninfo"
 	"github.com/stretchr/testify/assert"
 
 	"fyne.io/fyne/v2/cmd/fyne/internal/metadata"
@@ -21,6 +22,23 @@ func Test_calculateExeName(t *testing.T) {
 	assert.Equal(t, "testdata", nonModulesApp)
 }
 
+func Test_fixedVersionInfo(t *testing.T) {
+	tests := []struct {
+		ver   string
+		fixed goversioninfo.FileVersion
+	}{
+		{"", goversioninfo.FileVersion{Major: 0, Minor: 0, Patch: 0, Build: 1}},
+		{"1.1.1.1", goversioninfo.FileVersion{Major: 1, Minor: 1, Patch: 1, Build: 1}},
+		{"2.2.2", goversioninfo.FileVersion{Major: 2, Minor: 2, Patch: 2, Build: 1}},
+		{"3.3.3.3.3", goversioninfo.FileVersion{Major: 3, Minor: 3, Patch: 3, Build: 3}},
+	}
+
+	for _, tt := range tests {
+		parsed := fixedVersionInfo(tt.ver)
+		assert.Equal(t, tt.fixed, parsed)
+	}
+}
+
 func Test_isValidVersion(t *testing.T) {
 	assert.True(t, isValidVersion("1"))
 	assert.True(t, isValidVersion("1.2"))
@@ -35,7 +53,7 @@ func Test_isValidVersion(t *testing.T) {
 
 func Test_MergeMetata(t *testing.T) {
 	p := &Packager{appData: &appData{}}
-	p.appVersion = "v0.1"
+	p.AppVersion = "v0.1"
 	data := &metadata.FyneApp{
 		Details: metadata.AppDetails{
 			Icon:    "test.png",
@@ -45,8 +63,8 @@ func Test_MergeMetata(t *testing.T) {
 	}
 
 	mergeMetadata(p.appData, data)
-	assert.Equal(t, "v0.1", p.appVersion)
-	assert.Equal(t, 3, p.appBuild)
+	assert.Equal(t, "v0.1", p.AppVersion)
+	assert.Equal(t, 3, p.AppBuild)
 	assert.Equal(t, "test.png", p.icon)
 }
 
@@ -79,6 +97,12 @@ func Test_validateAppID(t *testing.T) {
 
 func Test_buildPackageWasm(t *testing.T) {
 	expected := []mockRunner{
+		{
+			expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+			mockReturn: mockReturn{
+				ret: []byte("{ \"Module\": { \"Path\": \"fyne.io/fyne/v2\"} }"),
+			},
+		},
 		{
 			expectedValue: expectedValue{args: []string{"version"}},
 			mockReturn: mockReturn{
@@ -114,6 +138,12 @@ func Test_buildPackageWasm(t *testing.T) {
 func Test_PackageWasm(t *testing.T) {
 	expected := []mockRunner{
 		{
+			expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+			mockReturn: mockReturn{
+				ret: []byte("{ \"Module\": { \"Path\": \"fyne.io/fyne/v2\"} }"),
+			},
+		},
+		{
 			expectedValue: expectedValue{args: []string{"version"}},
 			mockReturn: mockReturn{
 				ret: []byte("go version go1.17.6 windows/amd64"),
@@ -121,9 +151,7 @@ func Test_PackageWasm(t *testing.T) {
 		},
 		{
 			expectedValue: expectedValue{
-				args: []string{"build", "-ldflags",
-					"-X 'fyne.io/fyne/v2/internal/app.MetaName=myTest.wasm' -X 'fyne.io/fyne/v2/internal/app.MetaVersion=1.0.0' -X 'fyne.io/fyne/v2/internal/app.MetaBuild=1'",
-					"-o", "myTest.wasm"},
+				args:  []string{"build", "-o", "myTest.wasm"},
 				env:   []string{"GOARCH=wasm", "GOOS=js"},
 				osEnv: true,
 				dir:   "myTest",
@@ -135,14 +163,15 @@ func Test_PackageWasm(t *testing.T) {
 	}
 
 	p := &Packager{
-		appData: &appData{},
-		os:      "wasm",
-		srcDir:  "myTest",
-		dir:     "myTestTarget",
-		exe:     "myTest.wasm",
+		appData: &appData{
+			Name: "myTest",
+			icon: "myTest.png",
+		},
+		os:     "wasm",
+		srcDir: "myTest",
+		dir:    "myTestTarget",
+		exe:    "myTest.wasm",
 	}
-	p.name = "myTest.wasm"
-	p.icon = "myTest.png"
 	wasmBuildTest := &testCommandRuns{runs: expected, t: t}
 
 	util = mockUtil{}
@@ -173,6 +202,10 @@ func Test_PackageWasm(t *testing.T) {
 	expectedWriteFileRuns := mockWriteFileRuns{
 		expected: []mockWriteFile{
 			{filepath.Join("myTestTarget", "wasm", "index.html"), nil},
+			{filepath.Join("myTestTarget", "wasm", "spinner_light.gif"), nil},
+			{filepath.Join("myTestTarget", "wasm", "spinner_dark.gif"), nil},
+			{filepath.Join("myTestTarget", "wasm", "light.css"), nil},
+			{filepath.Join("myTestTarget", "wasm", "dark.css"), nil},
 			{filepath.Join("myTestTarget", "wasm", "webgl-debug.js"), nil},
 		},
 	}
@@ -203,6 +236,22 @@ func Test_PackageWasm(t *testing.T) {
 func Test_buildPackageGopherJS(t *testing.T) {
 	expected := []mockRunner{
 		{
+			expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+			mockReturn: mockReturn{
+				ret: []byte("{ \"Module\": { \"Path\": \"fyne.io/fyne/v2\"} }"),
+			},
+		},
+		{
+			expectedValue: expectedValue{
+				args:  []string{"version"},
+				osEnv: true,
+			},
+			mockReturn: mockReturn{
+				ret: []byte(""),
+				err: nil,
+			},
+		},
+		{
 			expectedValue: expectedValue{
 				args:  []string{"build", "-o", "myTest.js", "--tags", "release"},
 				osEnv: true,
@@ -231,9 +280,24 @@ func Test_buildPackageGopherJS(t *testing.T) {
 func Test_PackageGopherJS(t *testing.T) {
 	expected := []mockRunner{
 		{
+			expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+			mockReturn: mockReturn{
+				ret: []byte("{ \"Module\": { \"Path\": \"fyne.io/fyne/v2\"} }"),
+			},
+		},
+		{
 			expectedValue: expectedValue{
-				args: []string{"build", "-ldflags",
-					"-X 'fyne.io/fyne/v2/internal/app.MetaName=myTest.js' -X 'fyne.io/fyne/v2/internal/app.MetaVersion=1.0.0' -X 'fyne.io/fyne/v2/internal/app.MetaBuild=1'",
+				args:  []string{"version"},
+				osEnv: true,
+			},
+			mockReturn: mockReturn{
+				ret: []byte(""),
+				err: nil,
+			},
+		},
+		{
+			expectedValue: expectedValue{
+				args: []string{"build",
 					"-o", "myTest.js"},
 				osEnv: true,
 				dir:   "myTest",
@@ -245,14 +309,15 @@ func Test_PackageGopherJS(t *testing.T) {
 	}
 
 	p := &Packager{
-		appData: &appData{},
-		os:      "gopherjs",
-		srcDir:  "myTest",
-		dir:     "myTestTarget",
-		exe:     "myTest.js",
+		appData: &appData{
+			Name: "myTest",
+			icon: "myTest.png",
+		},
+		os:     "gopherjs",
+		srcDir: "myTest",
+		dir:    "myTestTarget",
+		exe:    "myTest.js",
 	}
-	p.name = "myTest.js"
-	p.icon = "myTest.png"
 	gopherjsBuildTest := &testCommandRuns{runs: expected, t: t}
 
 	util = mockUtil{}
@@ -283,6 +348,10 @@ func Test_PackageGopherJS(t *testing.T) {
 	expectedWriteFileRuns := mockWriteFileRuns{
 		expected: []mockWriteFile{
 			{filepath.Join("myTestTarget", "gopherjs", "index.html"), nil},
+			{filepath.Join("myTestTarget", "gopherjs", "spinner_light.gif"), nil},
+			{filepath.Join("myTestTarget", "gopherjs", "spinner_dark.gif"), nil},
+			{filepath.Join("myTestTarget", "gopherjs", "light.css"), nil},
+			{filepath.Join("myTestTarget", "gopherjs", "dark.css"), nil},
 			{filepath.Join("myTestTarget", "gopherjs", "webgl-debug.js"), nil},
 		},
 	}
@@ -312,6 +381,12 @@ func Test_PackageGopherJS(t *testing.T) {
 func Test_BuildPackageWeb(t *testing.T) {
 	expected := []mockRunner{
 		{
+			expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+			mockReturn: mockReturn{
+				ret: []byte("{ \"Module\": { \"Path\": \"fyne.io/fyne/v2\"} }"),
+			},
+		},
+		{
 			expectedValue: expectedValue{args: []string{"version"}},
 			mockReturn: mockReturn{
 				ret: []byte("go version go1.17.6 windows/amd64"),
@@ -326,6 +401,22 @@ func Test_BuildPackageWeb(t *testing.T) {
 			},
 			mockReturn: mockReturn{
 				ret: []byte(""),
+			},
+		},
+		{
+			expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+			mockReturn: mockReturn{
+				ret: []byte("{ \"Module\": { \"Path\": \"fyne.io/fyne/v2\"} }"),
+			},
+		},
+		{
+			expectedValue: expectedValue{
+				args:  []string{"version"},
+				osEnv: true,
+			},
+			mockReturn: mockReturn{
+				ret: []byte(""),
+				err: nil,
 			},
 		},
 		{
@@ -357,6 +448,12 @@ func Test_BuildPackageWeb(t *testing.T) {
 func Test_PackageWeb(t *testing.T) {
 	expected := []mockRunner{
 		{
+			expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+			mockReturn: mockReturn{
+				ret: []byte("{ \"Module\": { \"Path\": \"fyne.io/fyne/v2\"} }"),
+			},
+		},
+		{
 			expectedValue: expectedValue{args: []string{"version"}},
 			mockReturn: mockReturn{
 				ret: []byte("go version go1.17.6 windows/amd64"),
@@ -364,9 +461,7 @@ func Test_PackageWeb(t *testing.T) {
 		},
 		{
 			expectedValue: expectedValue{
-				args: []string{"build", "-ldflags",
-					"-X 'fyne.io/fyne/v2/internal/app.MetaName=myTest' -X 'fyne.io/fyne/v2/internal/app.MetaVersion=1.0.0' -X 'fyne.io/fyne/v2/internal/app.MetaBuild=1'",
-					"-o", "myTest.wasm"},
+				args:  []string{"build", "-o", "myTest.wasm"},
 				env:   []string{"GOARCH=wasm", "GOOS=js"},
 				osEnv: true,
 				dir:   "myTest",
@@ -376,9 +471,24 @@ func Test_PackageWeb(t *testing.T) {
 			},
 		},
 		{
+			expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+			mockReturn: mockReturn{
+				ret: []byte("{ \"Module\": { \"Path\": \"fyne.io/fyne/v2\"} }"),
+			},
+		},
+		{
 			expectedValue: expectedValue{
-				args: []string{"build", "-ldflags",
-					"-X 'fyne.io/fyne/v2/internal/app.MetaName=myTest' -X 'fyne.io/fyne/v2/internal/app.MetaVersion=1.0.0' -X 'fyne.io/fyne/v2/internal/app.MetaBuild=1'",
+				args:  []string{"version"},
+				osEnv: true,
+			},
+			mockReturn: mockReturn{
+				ret: []byte(""),
+				err: nil,
+			},
+		},
+		{
+			expectedValue: expectedValue{
+				args: []string{"build",
 					"-o", "myTest.js"},
 				osEnv: true,
 				dir:   "myTest",
@@ -396,7 +506,7 @@ func Test_PackageWeb(t *testing.T) {
 		dir:     "myTestTarget",
 		exe:     "myTest",
 	}
-	p.name = "myTest"
+	p.Name = "myTest"
 	p.icon = "myTest.png"
 	gopherjsBuildTest := &testCommandRuns{runs: expected, t: t}
 
@@ -427,6 +537,10 @@ func Test_PackageWeb(t *testing.T) {
 	expectedWriteFileRuns := mockWriteFileRuns{
 		expected: []mockWriteFile{
 			{filepath.Join("myTestTarget", "web", "index.html"), nil},
+			{filepath.Join("myTestTarget", "web", "spinner_light.gif"), nil},
+			{filepath.Join("myTestTarget", "web", "spinner_dark.gif"), nil},
+			{filepath.Join("myTestTarget", "web", "light.css"), nil},
+			{filepath.Join("myTestTarget", "web", "dark.css"), nil},
 			{filepath.Join("myTestTarget", "web", "webgl-debug.js"), nil},
 		},
 	}

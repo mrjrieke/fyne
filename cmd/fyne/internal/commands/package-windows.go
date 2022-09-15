@@ -6,9 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/cmd/fyne/internal/templates"
-	ico "github.com/Kodeworks/golang-image-ico"
+	"github.com/fyne-io/image/ico"
 	"github.com/josephspurrier/goversioninfo"
 	"golang.org/x/sys/execabs"
 )
@@ -32,7 +35,7 @@ func (p *Packager) packageWindows() error {
 		return fmt.Errorf("failed to decode source image: %w", err)
 	}
 
-	icoPath := filepath.Join(exePath, p.name+".ico")
+	icoPath := filepath.Join(exePath, p.Name+".ico")
 	file, err := os.Create(icoPath)
 	if err != nil {
 		return fmt.Errorf("failed to open image file: %w", err)
@@ -56,7 +59,7 @@ func (p *Packager) packageWindows() error {
 		manifestFile, _ := os.Create(manifest)
 
 		tplData := windowsData{
-			Name:            p.name,
+			Name:            p.Name,
 			CombinedVersion: p.combinedVersion(),
 		}
 		err := templates.ManifestWindows.Execute(manifestFile, tplData)
@@ -69,9 +72,11 @@ func (p *Packager) packageWindows() error {
 	outPath := filepath.Join(exePath, "fyne.syso")
 
 	vi := &goversioninfo.VersionInfo{}
-	vi.ProductName = p.name
+	vi.ProductName = p.Name
 	vi.IconPath = icoPath
 	vi.ManifestPath = manifest
+	vi.StringFileInfo.ProductVersion = p.combinedVersion()
+	vi.FixedFileInfo.FileVersion = fixedVersionInfo(p.combinedVersion())
 
 	vi.Build()
 	vi.Walk()
@@ -104,9 +109,9 @@ func (p *Packager) packageWindows() error {
 
 	appPath := p.exe
 	appName := filepath.Base(p.exe)
-	if filepath.Base(p.exe) != p.name {
-		appName = p.name
-		if filepath.Ext(p.name) != ".exe" {
+	if filepath.Base(p.exe) != p.Name {
+		appName = p.Name
+		if filepath.Ext(p.Name) != ".exe" {
 			appName = appName + ".exe"
 		}
 		appPath = filepath.Join(filepath.Dir(p.exe), appName)
@@ -130,4 +135,33 @@ func runAsAdminWindows(args ...string) error {
 	}
 
 	return execabs.Command("powershell.exe", "Start-Process", "cmd.exe", "-Verb", "runAs", "-ArgumentList", cmd).Run()
+}
+
+func fixedVersionInfo(ver string) (ret goversioninfo.FileVersion) {
+	ret.Build = 1 // as 0,0,0,0 is not valid
+	if len(ver) == 0 {
+		return ret
+	}
+	split := strings.Split(ver, ".")
+	setVersionField(&ret.Major, split[0])
+	if len(split) > 1 {
+		setVersionField(&ret.Minor, split[1])
+	}
+	if len(split) > 2 {
+		setVersionField(&ret.Patch, split[2])
+	}
+	if len(split) > 3 {
+		setVersionField(&ret.Build, split[3])
+	}
+	return ret
+}
+
+func setVersionField(to *int, ver string) {
+	num, err := strconv.Atoi(ver)
+	if err != nil {
+		fyne.LogError("Failed to parse app version field", err)
+		return
+	}
+
+	*to = num
 }

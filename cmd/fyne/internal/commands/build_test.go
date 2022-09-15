@@ -8,17 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBuildGenerateMetaLDFlags(t *testing.T) {
-	b := &Builder{appData: &appData{}}
-	assert.Equal(t, "", b.generateMetaLDFlags())
-
-	b.appID = "com.example"
-	assert.Equal(t, "-X 'fyne.io/fyne/v2/internal/app.MetaID=com.example'", b.generateMetaLDFlags())
-
-	b.appVersion = "1.2.3"
-	assert.Equal(t, "-X 'fyne.io/fyne/v2/internal/app.MetaID=com.example' -X 'fyne.io/fyne/v2/internal/app.MetaVersion=1.2.3'", b.generateMetaLDFlags())
-}
-
 func Test_CheckGoVersionNoGo(t *testing.T) {
 	commandNil := &testCommandRuns{runs: []mockRunner{}, t: t}
 	assert.Nil(t, checkGoVersion(commandNil, nil))
@@ -113,6 +102,12 @@ func Test_CheckVersionTableTests(t *testing.T) {
 func Test_BuildWasmVersion(t *testing.T) {
 	expected := []mockRunner{
 		{
+			expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+			mockReturn: mockReturn{
+				ret: []byte("{ \"Module\": { \"Path\": \"fyne.io/fyne/v2\"}"),
+			},
+		},
+		{
 			expectedValue: expectedValue{args: []string{"version"}},
 			mockReturn:    mockReturn{ret: []byte("go version go1.17.6 windows/amd64")},
 		},
@@ -136,6 +131,12 @@ func Test_BuildWasmVersion(t *testing.T) {
 
 func Test_BuildWasmReleaseVersion(t *testing.T) {
 	expected := []mockRunner{
+		{
+			expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+			mockReturn: mockReturn{
+				ret: []byte("{ \"Module\": { \"Path\": \"fyne.io/fyne/v2\"}"),
+			},
+		},
 		{
 			expectedValue: expectedValue{args: []string{"version"}},
 			mockReturn: mockReturn{
@@ -165,6 +166,22 @@ func Test_BuildWasmReleaseVersion(t *testing.T) {
 func Test_BuildGopherJSReleaseVersion(t *testing.T) {
 	expected := []mockRunner{
 		{
+			expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+			mockReturn: mockReturn{
+				ret: []byte("{ \"Module\": { \"Path\": \"fyne.io/fyne/v2\"}"),
+			},
+		},
+		{
+			expectedValue: expectedValue{
+				args:  []string{"version"},
+				osEnv: true,
+			},
+			mockReturn: mockReturn{
+				ret: []byte(""),
+				err: nil,
+			},
+		},
+		{
 			expectedValue: expectedValue{
 				args:  []string{"build", "--tags", "release"},
 				osEnv: true,
@@ -186,6 +203,12 @@ func Test_BuildGopherJSReleaseVersion(t *testing.T) {
 func Test_BuildWasmOldVersion(t *testing.T) {
 	expected := []mockRunner{
 		{
+			expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+			mockReturn: mockReturn{
+				ret: []byte("{ \"Module\": { \"Path\": \"fyne.io/fyne/v2\"}"),
+			},
+		},
+		{
 			expectedValue: expectedValue{args: []string{"version"}},
 			mockReturn:    mockReturn{ret: []byte("go version go1.16.0 windows/amd64")},
 		},
@@ -196,4 +219,37 @@ func Test_BuildWasmOldVersion(t *testing.T) {
 	err := b.build()
 	assert.NotNil(t, err)
 	wasmBuildTest.verifyExpectation()
+}
+
+type jsonTest struct {
+	expected bool
+	json     []byte
+}
+
+func Test_FyneGoMod(t *testing.T) {
+	jsonTests := []jsonTest{
+		{false, []byte(`{"Module": {"Path": "github.com/fyne-io/calculator"},"Go": "1.14",	"Require": [ { "Path": "fyne.io/fyne/v2","Version": "v2.1.4"} ] }`)},
+		{true, []byte(`{ "Module": {"Path": "fyne.io/fyne/v2"},"Require": [{ "Path": "test","Version": "v2.1.4"} ] }`)},
+		{true, []byte(`{"Module": {"Path": "github.com/fyne-io/calculator"},"Go": "1.14",	"Require": [ { "Path": "fyne.io/fyne/v2","Version": "v2.2.0"} ] }`)},
+	}
+
+	for _, j := range jsonTests {
+		expected := []mockRunner{
+			{
+				expectedValue: expectedValue{args: []string{"mod", "edit", "-json"}},
+				mockReturn:    mockReturn{ret: j.json},
+			},
+		}
+
+		called := false
+
+		fyneGoModTest := &testCommandRuns{runs: expected, t: t}
+		injectMetadataIfPossible(fyneGoModTest, "myTest", &appData{}, "",
+			func(string, *appData, string) (func(), error) {
+				called = true
+				return func() {}, nil
+			})
+
+		assert.Equal(t, j.expected, called)
+	}
 }

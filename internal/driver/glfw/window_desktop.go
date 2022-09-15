@@ -167,7 +167,7 @@ func (w *window) doCenterOnScreen() {
 }
 
 func (w *window) RequestFocus() {
-	if isWayland {
+	if isWayland || w.view() == nil {
 		return
 	}
 

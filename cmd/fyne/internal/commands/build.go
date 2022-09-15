@@ -1,17 +1,19 @@
 package commands
 
 import (
-	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
+
+	version "github.com/mcuadros/go-version"
+	"github.com/urfave/cli/v2"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/cmd/fyne/internal/metadata"
-	version "github.com/mcuadros/go-version"
-	"github.com/urfave/cli/v2"
+	"fyne.io/fyne/v2/cmd/fyne/internal/templates"
 )
 
 // Builder generate the executables.
@@ -102,7 +104,7 @@ func checkVersion(output string, versionConstraint *version.ConstraintGroup) err
 		return fmt.Errorf("invalid output for `go version`: `%s`", output)
 	}
 
-	normalized := version.Normalize(split[2][2 : len(split[2])-2])
+	normalized := version.Normalize(split[2][2:len(split[2])])
 	if !versionConstraint.Match(normalized) {
 		return fmt.Errorf("expected go version %v got `%v`", versionConstraint.GetConstraints(), normalized)
 	}
@@ -128,6 +130,41 @@ func checkGoVersion(runner runner, versionConstraint *version.ConstraintGroup) e
 	return checkVersion(string(goVersion), versionConstraint)
 }
 
+type goModEdit struct {
+	Module struct {
+		Path string
+	}
+	Require []struct {
+		Path    string
+		Version string
+	}
+}
+
+func getFyneGoModVersion(runner runner) (string, error) {
+	dependenciesOutput, err := runner.runOutput("mod", "edit", "-json")
+	if err != nil {
+		return "", err
+	}
+
+	var parsed goModEdit
+	err = json.Unmarshal(dependenciesOutput, &parsed)
+	if err != nil {
+		return "", err
+	}
+
+	if parsed.Module.Path == "fyne.io/fyne/v2" {
+		return "master", nil
+	}
+
+	for _, dep := range parsed.Require {
+		if dep.Path == "fyne.io/fyne/v2" {
+			return dep.Version, nil
+		}
+	}
+
+	return "", fmt.Errorf("fyne version not found")
+}
+
 func (b *Builder) build() error {
 	var versionConstraint *version.ConstraintGroup
 
@@ -136,12 +173,21 @@ func (b *Builder) build() error {
 		goos = targetOS()
 	}
 
+	fyneGoModRunner := b.runner
 	if b.runner == nil {
+		fyneGoModRunner = newCommand("go")
 		if goos != "gopherjs" {
 			b.runner = newCommand("go")
 		} else {
 			b.runner = newCommand("gopherjs")
 		}
+	}
+
+	close, err := injectMetadataIfPossible(fyneGoModRunner, b.srcdir, b.appData, b.icon, createMetadataInitFile)
+	if err != nil {
+		fyne.LogError("Failed to inject metadata init file, omitting metadata", err)
+	} else if close != nil {
+		defer close()
 	}
 
 	args := []string{"build"}
@@ -151,27 +197,18 @@ func (b *Builder) build() error {
 		env = append(env, "CGO_CFLAGS=-mmacosx-version-min=10.11", "CGO_LDFLAGS=-mmacosx-version-min=10.11")
 	}
 
-	data, err := metadata.LoadStandard(b.srcdir)
-	if err == nil {
-		mergeMetadata(b.appData, data)
-	}
-	meta := b.generateMetaLDFlags()
 	if !isWeb(goos) {
 		env = append(env, "CGO_ENABLED=1") // in case someone is trying to cross-compile...
 
 		if goos == "windows" {
 			if b.release {
-				args = append(args, "-ldflags", "-s -w -H=windowsgui "+meta)
+				args = append(args, "-ldflags", "-s -w -H=windowsgui ")
 			} else {
-				args = append(args, "-ldflags", "-H=windowsgui "+meta)
+				args = append(args, "-ldflags", "-H=windowsgui ")
 			}
 		} else if b.release {
-			args = append(args, "-ldflags", "-s -w "+meta)
-		} else if meta != "" {
-			args = append(args, "-ldflags", meta)
+			args = append(args, "-ldflags", "-s -w ")
 		}
-	} else if meta != "" {
-		args = append(args, "-ldflags", meta)
 	}
 
 	if b.target != "" {
@@ -202,6 +239,12 @@ func (b *Builder) build() error {
 		versionConstraint = version.NewConstrainGroupFromString(">=1.17")
 		env = append(env, "GOARCH=wasm")
 		env = append(env, "GOOS=js")
+	} else if goos == "gopherjs" {
+		_, err := b.runner.runOutput("version")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Can not execute `gopherjs version`. Please do `go install github.com/gopherjs/gopherjs@latest`.\n")
+			return err
+		}
 	}
 
 	if err := checkGoVersion(b.runner, versionConstraint); err != nil {
@@ -217,42 +260,43 @@ func (b *Builder) build() error {
 	return err
 }
 
-func (b *Builder) generateMetaLDFlags() string {
-	buildIDString := ""
-	if b.appBuild > 0 {
-		buildIDString = strconv.Itoa(b.appBuild)
+func createMetadataInitFile(srcdir string, app *appData, icon string) (func(), error) {
+	data, err := metadata.LoadStandard(srcdir)
+	if err == nil {
+		mergeMetadata(app, data)
 	}
-	iconBytes := ""
-	if b.icon != "" {
-		res, err := fyne.LoadResourceFromPath(b.icon)
-		if err != nil {
-			fyne.LogError("Unable to load file "+b.icon, err)
-		} else {
-			staticRes, ok := res.(*fyne.StaticResource)
-			if !ok {
-				fyne.LogError("Unable to format resource", fmt.Errorf("unexpected resource type %T", res))
-			} else {
-				iconBytes = base64.StdEncoding.EncodeToString(staticRes.StaticContent)
-			}
+
+	metadataInitFilePath := filepath.Join(srcdir, "fyne_metadata_init.go")
+	metadataInitFile, err := os.Create(metadataInitFilePath)
+	if err != nil {
+		return func() {}, err
+	}
+	defer metadataInitFile.Close()
+
+	err = templates.FyneMetadataInit.Execute(metadataInitFile, app)
+	if err == nil {
+		if icon != "" {
+			writeResource(icon, "fyneMetadataIcon", metadataInitFile)
 		}
 	}
 
-	inserts := [][2]string{
-		{"MetaID", b.appID},
-		{"MetaName", b.name},
-		{"MetaVersion", b.appVersion},
-		{"MetaBuild", buildIDString},
-		{"MetaIcon", iconBytes},
+	return func() { os.Remove(metadataInitFilePath) }, err
+}
+
+func injectMetadataIfPossible(runner runner, srcdir string, app *appData, icon string,
+	createMetadataInitFile func(srcdir string, app *appData, icon string) (func(), error)) (func(), error) {
+	fyneGoModVersion, err := getFyneGoModVersion(runner)
+	if err != nil {
+		return nil, err
 	}
 
-	var vars []string
-	for _, item := range inserts {
-		if item[1] != "" {
-			vars = append(vars, "-X 'fyne.io/fyne/v2/internal/app."+item[0]+"="+item[1]+"'")
-		}
+	fyneGoModVersionNormalized := version.Normalize(fyneGoModVersion)
+	fyneGoModVersionConstraint := version.NewConstrainGroupFromString(">=2.2")
+	if fyneGoModVersion != "master" && !fyneGoModVersionConstraint.Match(fyneGoModVersionNormalized) {
+		return nil, nil
 	}
 
-	return strings.Join(vars, " ")
+	return createMetadataInitFile(srcdir, app, icon)
 }
 
 func targetOS() string {

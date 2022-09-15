@@ -3,7 +3,6 @@ package commands
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -47,7 +46,7 @@ func Serve() *cli.Command {
 				Name:        "target",
 				Aliases:     []string{"os"},
 				Usage:       "The web runtime to target (wasm, gopherjs, web).",
-				Value:       "wasm",
+				Value:       "web",
 				Destination: &s.os,
 			},
 		},
@@ -84,7 +83,6 @@ func (s *Server) serve() error {
 
 	http.Handle("/", fileServer)
 
-	log.Println("AppData", s.appData)
 	fmt.Printf("Serving %s on HTTP port: %v\n", webDir, s.port)
 	err = http.ListenAndServe(":"+strconv.Itoa(s.port), nil)
 
