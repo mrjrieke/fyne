@@ -65,6 +65,7 @@ type window struct {
 	viewLock   sync.RWMutex
 	createLock sync.Once
 	decorate   bool
+	floating   bool
 	closing    bool
 	fixedSize  bool
 
@@ -665,6 +666,11 @@ func (w *window) create() {
 		}
 
 		win, err := glfw.CreateWindow(pixWidth, pixHeight, w.title, nil, nil)
+
+		if w.floating {
+			win.SetAttrib(glfw.Floating, 1)
+		}
+
 		if err != nil {
 			w.driver.initFailed("window creation error", err)
 			return

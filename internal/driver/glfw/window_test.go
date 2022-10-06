@@ -73,7 +73,7 @@ func TestGLDriver_CreateWindow_EmptyTitle(t *testing.T) {
 
 func TestGLDriver_CreateSplashWindow(t *testing.T) {
 	d := NewGLDriver().(desktop.Driver)
-	w := d.CreateSplashWindow().(*window)
+	w := d.CreateSplashWindow(false).(*window)
 	w.create()
 
 	assert.Equal(t, 0, w.viewport.GetAttrib(glfw.Decorated))
