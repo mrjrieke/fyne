@@ -338,6 +338,9 @@ func (r *appTabsRenderer) buildTabButtons(count int) *fyne.Container {
 	}
 
 	for i := 0; i < count; i++ {
+		if i >= len(r.appTabs.Items) {
+			break
+		}
 		item := r.appTabs.Items[i]
 		button, ok := r.buttonCache[item]
 		if !ok {
