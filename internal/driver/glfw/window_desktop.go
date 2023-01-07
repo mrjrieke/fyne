@@ -142,6 +142,22 @@ func (w *window) CenterOnScreen() {
 	}
 }
 
+func (w *window) PosResize(xpos int, ypos int, width int, height int) {
+	w.xpos = xpos
+	w.ypos = ypos
+	w.shouldWidth = width
+	w.shouldHeight = height
+	if w.view() != nil {
+		runOnMain(w.doResize)
+	}
+}
+
+func (w *window) doResize() {
+	// set new window coordinates and size
+	w.viewport.SetPos(w.xpos, w.ypos)
+	w.viewport.SetSize(w.shouldWidth, w.shouldHeight)
+}
+
 func (w *window) doCenterOnScreen() {
 	viewWidth, viewHeight := w.screenSize(w.canvas.size)
 	if w.width > viewWidth { // in case our window has not called back to canvas size yet
