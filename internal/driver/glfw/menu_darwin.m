@@ -1,9 +1,23 @@
+//go:build !no_native_menus
 // +build !no_native_menus
 
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 
+const int menuTagMin = 5000;
+
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
+NSControlStateValue STATE_ON = NSControlStateValueOn;
+NSControlStateValue STATE_OFF = NSControlStateValueOff;
+#else
+NSCellStateValue STATE_ON = NSOnState;
+NSCellStateValue STATE_OFF = NSOffState;
+#endif
+
+
 extern void menuCallback(int);
+extern BOOL menuEnabled(int);
+extern BOOL menuChecked(int);
 extern void exceptionCallback(const char*);
 
 @interface FyneMenuHandler : NSObject {
@@ -12,7 +26,17 @@ extern void exceptionCallback(const char*);
 
 @implementation FyneMenuHandler
 + (void) tapped:(NSMenuItem*) item {
-    menuCallback([item tag]);
+    menuCallback([item tag]-menuTagMin);
+}
++ (BOOL) validateMenuItem:(NSMenuItem*) item {
+    BOOL checked = menuChecked([item tag]-menuTagMin);
+    if (checked) {
+        [item setState:STATE_ON];
+    } else {
+        [item setState:STATE_OFF];
+    }
+
+    return menuEnabled([item tag]-menuTagMin);
 }
 @end
 
@@ -29,6 +53,7 @@ void assignDarwinSubmenu(const void* i, const void* m) {
 void completeDarwinMenu(const void* m, bool prepend) {
     NSMenu* main = nativeMainMenu();
     NSMenuItem* top = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+    [top setTag:menuTagMin];
     if (prepend) {
         [main insertItem:top atIndex:1];
     } else {
@@ -49,7 +74,7 @@ void handleException(const char* m, id e) {
     exceptionCallback([[NSString stringWithFormat:@"%s failed: %@", m, e] UTF8String]);
 }
 
-const void* insertDarwinMenuItem(const void* m, const char* label, int id, int index, bool isSeparator) {
+const void* insertDarwinMenuItem(const void* m, const char* label, const char* keyEquivalent, unsigned int keyEquivalentModifierMask, int id, int index, bool isSeparator) {
     NSMenu* menu = (NSMenu*)m;
     NSMenuItem* item;
 
@@ -59,9 +84,12 @@ const void* insertDarwinMenuItem(const void* m, const char* label, int id, int i
         item = [[NSMenuItem alloc]
             initWithTitle:[NSString stringWithUTF8String:label]
             action:@selector(tapped:)
-            keyEquivalent:@""];
+            keyEquivalent:[NSString stringWithUTF8String:keyEquivalent]];
+        if (keyEquivalentModifierMask) {
+            [item setKeyEquivalentModifierMask: keyEquivalentModifierMask];
+        }
         [item setTarget:[FyneMenuHandler class]];
-        [item setTag:id];
+        [item setTag:id+menuTagMin];
     }
 
     if (index > -1) {
@@ -76,6 +104,32 @@ const void* insertDarwinMenuItem(const void* m, const char* label, int id, int i
 NSMenu* nativeMainMenu() {
     NSApplication* app = [NSApplication sharedApplication];
     return [app mainMenu];
+}
+
+void resetDarwinMenu() {
+    NSMenu *root = nativeMainMenu();
+    NSEnumerator *items = [[root itemArray] objectEnumerator];
+
+    id object;
+    while (object = [items nextObject]) {
+        NSMenuItem *item = object;
+        if ([item tag] < menuTagMin) {
+            // check for inserted items (like Settings...)
+            NSMenu *menu = [item submenu];
+            NSEnumerator *subItems = [[menu itemArray] objectEnumerator];
+
+            id sub;
+            while (sub = [subItems nextObject]) {
+                NSMenuItem *item = sub;
+                if ([item tag] >= menuTagMin) {
+                    [menu removeItem: item];
+                }
+            }
+
+            continue;
+        }
+        [root removeItem: item];
+    }
 }
 
 const void* test_darwinMainMenu() {
@@ -127,6 +181,16 @@ const char* test_NSMenu_title(const void* m) {
 bool test_NSMenuItem_isSeparatorItem(const void* i) {
     NSMenuItem* item = (NSMenuItem*)i;
     return [item isSeparatorItem];
+}
+
+const char* test_NSMenuItem_keyEquivalent(const void *i) {
+    NSMenuItem* item = (NSMenuItem*)i;
+    return [[item keyEquivalent] UTF8String];
+}
+
+unsigned long test_NSMenuItem_keyEquivalentModifierMask(const void *i) {
+    NSMenuItem* item = (NSMenuItem*)i;
+    return [item keyEquivalentModifierMask];
 }
 
 const void* test_NSMenuItem_submenu(const void* i) {

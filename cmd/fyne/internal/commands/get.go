@@ -1,20 +1,20 @@
 package commands
 
 import (
+	"errors"
+	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"fyne.io/fyne/v2/cmd/fyne/internal/util"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
+	"golang.org/x/sys/execabs"
 )
 
 // Get returns the command which downloads and installs fyne applications.
 func Get() *cli.Command {
-	g := &Getter{}
+	g := &Getter{appData: &appData{}}
 	return &cli.Command{
 		Name:        "get",
 		Usage:       "Downloads and installs a Fyne application",
@@ -23,7 +23,7 @@ func Get() *cli.Command {
 			&cli.StringFlag{
 				Name:        "icon",
 				Usage:       "The name of the application icon file.",
-				Value:       "Icon.png",
+				Value:       "",
 				Destination: &g.icon,
 			},
 			&cli.StringFlag{
@@ -46,18 +46,18 @@ func Get() *cli.Command {
 
 // Getter is the command that can handle downloading and installing Fyne apps to the current platform.
 type Getter struct {
-	icon, appID string
+	*appData
 }
 
 // NewGetter returns a command that can handle the download and install of GUI apps built using Fyne.
 // It depends on a Go and C compiler installed at this stage and takes a single, package, parameter to identify the app.
 func NewGetter() *Getter {
-	return &Getter{}
+	return &Getter{appData: &appData{}}
 }
 
 // Get automates the download and install of a named GUI app package.
 func (g *Getter) Get(pkg string) error {
-	cmd := exec.Command("go", "get", "-u", "-d", pkg)
+	cmd := execabs.Command("go", "get", "-u", "-d", pkg)
 	cmd.Env = append(os.Environ(), "GO111MODULE=off") // cache the downloaded code
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 
@@ -71,9 +71,9 @@ func (g *Getter) Get(pkg string) error {
 		return err
 	}
 
-	install := &Installer{srcDir: path, icon: g.icon, appID: g.appID, release: true}
+	install := &Installer{appData: g.appData, srcDir: path, release: true}
 	if err := install.validate(); err != nil {
-		return errors.Wrap(err, "Failed to set up installer")
+		return fmt.Errorf("failed to set up installer: %w", err)
 	}
 
 	return install.install()
@@ -95,6 +95,7 @@ func (g *Getter) SetIcon(path string) {
 //
 // Deprecated: Get does not define any flags.
 func (g *Getter) AddFlags() {
+	flag.StringVar(&g.icon, "icon", "Icon.png", "The name of the application icon file")
 }
 
 // PrintHelp prints help for this command when used in a command-line context
@@ -122,7 +123,7 @@ func (g *Getter) Run(args []string) {
 }
 
 func goPath() string {
-	cmd := exec.Command("go", "env", "GOPATH")
+	cmd := execabs.Command("go", "env", "GOPATH")
 	out, err := cmd.CombinedOutput()
 
 	if err != nil {

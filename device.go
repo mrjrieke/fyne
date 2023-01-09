@@ -28,8 +28,11 @@ func IsHorizontal(orient DeviceOrientation) bool {
 type Device interface {
 	Orientation() DeviceOrientation
 	IsMobile() bool
+	IsBrowser() bool
 	HasKeyboard() bool
 	SystemScaleForWindow(Window) float32
+	GetPos() (int, int)
+	GetFrameSize() (int, int, int, int)
 }
 
 // CurrentDevice returns the device information for the current hardware (via the driver)

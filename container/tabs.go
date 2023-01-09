@@ -59,6 +59,30 @@ type baseTabs interface {
 	setSelected(int)
 
 	tabLocation() TabLocation
+
+	transitioning() bool
+	setTransitioning(bool)
+}
+
+func tabsAdjustedLocation(l TabLocation) TabLocation {
+	// Mobile has limited screen space, so don't put app tab bar on long edges
+	if d := fyne.CurrentDevice(); d.IsMobile() {
+		if o := d.Orientation(); fyne.IsVertical(o) {
+			if l == TabLocationLeading {
+				return TabLocationTop
+			} else if l == TabLocationTrailing {
+				return TabLocationBottom
+			}
+		} else {
+			if l == TabLocationTop {
+				return TabLocationLeading
+			} else if l == TabLocationBottom {
+				return TabLocationTrailing
+			}
+		}
+	}
+
+	return l
 }
 
 func buildPopUpMenu(t baseTabs, button *widget.Button, items []*fyne.MenuItem) *widget.PopUpMenu {
@@ -82,6 +106,12 @@ func buildPopUpMenu(t baseTabs, button *widget.Button, items []*fyne.MenuItem) *
 	case TabLocationBottom:
 		popUpPos.X = buttonPos.X + buttonSize.Width - popUpMin.Width
 		popUpPos.Y = buttonPos.Y - popUpMin.Height
+	}
+	if popUpPos.X < 0 {
+		popUpPos.X = 0
+	}
+	if popUpPos.Y < 0 {
+		popUpPos.Y = 0
 	}
 	popUpMenu.ShowAtPosition(popUpPos)
 	return popUpMenu
@@ -136,6 +166,7 @@ func selectIndex(t baseTabs, index int) {
 		return
 	}
 
+	t.setTransitioning(true)
 	t.setSelected(index)
 
 	if f := t.onSelected(); f != nil {
@@ -177,9 +208,10 @@ func setItems(t baseTabs, items []*TabItem) {
 type baseTabsRenderer struct {
 	positionAnimation, sizeAnimation *fyne.Animation
 
-	lastIndicatorMutex sync.RWMutex
-	lastIndicatorPos   fyne.Position
-	lastIndicatorSize  fyne.Size
+	lastIndicatorMutex  sync.RWMutex
+	lastIndicatorPos    fyne.Position
+	lastIndicatorSize   fyne.Size
+	lastIndicatorHidden bool
 
 	action             *widget.Button
 	bar                *fyne.Container
@@ -276,7 +308,8 @@ func (r *baseTabsRenderer) minSize(t baseTabs) fyne.Size {
 
 func (r *baseTabsRenderer) moveIndicator(pos fyne.Position, siz fyne.Size, animate bool) {
 	r.lastIndicatorMutex.RLock()
-	isSameState := r.lastIndicatorPos.Subtract(pos).IsZero() && r.lastIndicatorSize.Subtract(siz).IsZero()
+	isSameState := r.lastIndicatorPos.Subtract(pos).IsZero() && r.lastIndicatorSize.Subtract(siz).IsZero() &&
+		r.lastIndicatorHidden == r.indicator.Hidden
 	r.lastIndicatorMutex.RUnlock()
 	if isSameState {
 		return
@@ -291,7 +324,7 @@ func (r *baseTabsRenderer) moveIndicator(pos fyne.Position, siz fyne.Size, anima
 		r.sizeAnimation = nil
 	}
 
-	r.indicator.Show()
+	r.indicator.FillColor = theme.PrimaryColor()
 	if r.indicator.Position().IsZero() {
 		r.indicator.Move(pos)
 		r.indicator.Resize(siz)
@@ -299,11 +332,13 @@ func (r *baseTabsRenderer) moveIndicator(pos fyne.Position, siz fyne.Size, anima
 		return
 	}
 
+	r.lastIndicatorMutex.Lock()
+	r.lastIndicatorPos = pos
+	r.lastIndicatorSize = siz
+	r.lastIndicatorHidden = r.indicator.Hidden
+	r.lastIndicatorMutex.Unlock()
+
 	if animate {
-		r.lastIndicatorMutex.Lock()
-		r.lastIndicatorPos = pos
-		r.lastIndicatorSize = siz
-		r.lastIndicatorMutex.Unlock()
 		r.positionAnimation = canvas.NewPositionAnimation(r.indicator.Position(), pos, canvas.DurationShort, func(p fyne.Position) {
 			r.indicator.Move(p)
 			r.indicator.Refresh()
@@ -378,7 +413,7 @@ func (b *tabButton) CreateRenderer() fyne.WidgetRenderer {
 		icon = canvas.NewImageFromResource(b.icon)
 	}
 
-	label := canvas.NewText(b.text, theme.TextColor())
+	label := canvas.NewText(b.text, theme.ForegroundColor())
 	label.TextStyle.Bold = true
 
 	close := &tabCloseButton{
@@ -528,7 +563,7 @@ func (r *tabButtonRenderer) Refresh() {
 	if r.button.importance == widget.HighImportance {
 		r.label.Color = theme.PrimaryColor()
 	} else {
-		r.label.Color = theme.TextColor()
+		r.label.Color = theme.ForegroundColor()
 	}
 	r.label.TextSize = theme.TextSize()
 	if r.button.text == "" {
@@ -573,9 +608,9 @@ func (r *tabButtonRenderer) iconSize() float32 {
 
 func (r *tabButtonRenderer) padding() fyne.Size {
 	if r.label.Text != "" && r.button.iconPosition == buttonIconInline {
-		return fyne.NewSize(theme.Padding()*4, theme.Padding()*2)
+		return fyne.NewSize(theme.Padding()*4, theme.Padding()*4)
 	}
-	return fyne.NewSize(theme.Padding()*2, theme.Padding()*2)
+	return fyne.NewSize(theme.Padding()*2, theme.Padding()*4)
 }
 
 var _ fyne.Widget = (*tabCloseButton)(nil)

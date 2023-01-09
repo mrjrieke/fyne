@@ -1,25 +1,26 @@
 package commands
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strconv"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/cmd/fyne/internal/mobile"
 	"fyne.io/fyne/v2/cmd/fyne/internal/templates"
-	"fyne.io/fyne/v2/cmd/fyne/internal/util"
-	"github.com/pkg/errors"
+
+	"golang.org/x/sys/execabs"
 )
 
 func (p *Packager) packageAndroid(arch string) error {
 	return mobile.RunNewBuild(arch, p.appID, p.icon, p.name, p.appVersion, p.appBuild, p.release, "", "")
 }
 
-func (p *Packager) packageIOS() error {
-	err := mobile.RunNewBuild("ios", p.appID, p.icon, p.name, p.appVersion, p.appBuild, p.release, p.certificate, p.profile)
+func (p *Packager) packageIOS(target string) error {
+	err := mobile.RunNewBuild(target, p.appID, p.icon, p.name, p.appVersion, p.appBuild, p.release, p.certificate, p.profile)
 	if err != nil {
 		return err
 	}
@@ -41,7 +42,7 @@ func (p *Packager) packageIOS() error {
 
 	err = templates.XCAssetsDarwin.Execute(contentFile, nil)
 	if err != nil {
-		return errors.Wrap(err, "Failed to write xcassets content template")
+		return fmt.Errorf("failed to write xcassets content template: %w", err)
 	}
 
 	if err = copyResizeIcon(1024, iconDir, p.icon); err != nil {
@@ -61,14 +62,37 @@ func (p *Packager) packageIOS() error {
 	}
 
 	appDir := filepath.Join(p.dir, mobile.AppOutputName(p.os, p.name))
-	cmd := exec.Command("xcrun", "actool", "Images.xcassets", "--compile", appDir, "--platform",
+	return runCmdCaptureOutput("xcrun", "actool", "Images.xcassets", "--compile", appDir, "--platform",
 		"iphoneos", "--target-device", "iphone", "--minimum-deployment-target", "9.0", "--app-icon", "AppIcon",
-		"--output-partial-info-plist", "/dev/null")
-	return cmd.Run()
+		"--output-format", "human-readable-text", "--output-partial-info-plist", "/dev/null")
 }
 
 func copyResizeIcon(size int, dir, source string) error {
-	path := fmt.Sprintf("%s/Icon_%d.png", dir, size)
-	strSize := fmt.Sprintf("%d", size)
-	return exec.Command("sips", "-o", path, "-Z", strSize, source).Run()
+	strSize := strconv.Itoa(size)
+	path := dir + "/Icon_" + strSize + ".png"
+	return runCmdCaptureOutput("sips", "-o", path, "-Z", strSize, source)
+}
+
+// runCmdCaptureOutput is a exec.Command wrapper that offers better error messages from stdout and stderr.
+func runCmdCaptureOutput(name string, args ...string) error {
+	var (
+		outbuf = &bytes.Buffer{}
+		errbuf = &bytes.Buffer{}
+	)
+	cmd := execabs.Command(name, args...)
+	cmd.Stdout = outbuf
+	cmd.Stderr = errbuf
+	err := cmd.Run()
+	if err != nil {
+		outstr := outbuf.String()
+		errstr := errbuf.String()
+		if outstr != "" {
+			err = fmt.Errorf(outbuf.String()+": %w", err)
+		}
+		if errstr != "" {
+			err = fmt.Errorf(outbuf.String()+": %w", err)
+		}
+		return err
+	}
+	return nil
 }

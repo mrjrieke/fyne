@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -13,8 +12,9 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/cmd/fyne/internal/mobile"
 	"fyne.io/fyne/v2/cmd/fyne/internal/templates"
-	"fyne.io/fyne/v2/cmd/fyne/internal/util"
+
 	"github.com/urfave/cli/v2"
+	"golang.org/x/sys/execabs"
 )
 
 var macAppStoreCategories = []string{
@@ -29,6 +29,7 @@ var macAppStoreCategories = []string{
 // Release returns the cli command for bundling release builds of fyne applications
 func Release() *cli.Command {
 	r := &Releaser{}
+	r.appData = &appData{}
 
 	return &cli.Command{
 		Name:  "release",
@@ -112,7 +113,7 @@ func Release() *cli.Command {
 			&cli.StringFlag{
 				Name:        "icon",
 				Usage:       "The name of the application icon file.",
-				Value:       "Icon.png",
+				Value:       "",
 				Destination: &r.icon,
 			},
 		},
@@ -137,7 +138,7 @@ type Releaser struct {
 func (r *Releaser) AddFlags() {
 	flag.StringVar(&r.os, "os", "", "The operating system to target (android, android/arm, android/arm64, android/amd64, android/386, darwin, freebsd, ios, linux, netbsd, openbsd, windows)")
 	flag.StringVar(&r.name, "name", "", "The name of the application, default is the executable file name")
-	flag.StringVar(&r.icon, "icon", "Icon.png", "The name of the application icon file")
+	flag.StringVar(&r.icon, "icon", "", "The name of the application icon file")
 	flag.StringVar(&r.appID, "appID", "", "For ios or darwin targets an appID is required, for ios this must \nmatch a valid provisioning profile")
 	flag.StringVar(&r.appVersion, "appVersion", "", "Version number in the form x, x.y or x.y.z semantic version")
 	flag.IntVar(&r.appBuild, "appBuild", 0, "Build number, should be greater than 0 and incremented for each build")
@@ -189,7 +190,7 @@ func (r *Releaser) releaseAction(_ *cli.Context) error {
 		return err
 	}
 
-	err := r.Packager.Package()
+	err := r.Packager.packageWithoutValidate()
 	if err != nil {
 		return err
 	}
@@ -278,22 +279,20 @@ func (r *Releaser) packageIOSRelease() error {
 	}
 	defer cleanup()
 
-	cmd := exec.Command("codesign", "-f", "-vv", "-s", r.certificate, "--entitlements",
+	cmd := execabs.Command("codesign", "-f", "-vv", "-s", r.certificate, "--entitlements",
 		"entitlements.plist", "Payload/"+appName+"/")
 	if err := cmd.Run(); err != nil {
 		fyne.LogError("Codesign failed", err)
 		return errors.New("unable to codesign application bundle")
 	}
 
-	return exec.Command("zip", "-r", appName[:len(appName)-4]+".ipa", "Payload/").Run()
+	return execabs.Command("zip", "-r", appName[:len(appName)-4]+".ipa", "Payload/").Run()
 }
 
 func (r *Releaser) packageMacOSRelease() error {
-	appCert := r.certificate // try to derive two certificates from one name (they will be consistent)
-	if strings.Contains(appCert, "Installer") {
-		appCert = strings.Replace(appCert, "Installer", "Application", 1)
-	}
-	installCert := strings.Replace(appCert, "Application", "Installer", 1)
+	// try to derive two certificates from one name (they will be consistent)
+	appCert := strings.Replace(r.certificate, "Installer", "Application", 1)
+	installCert := strings.Replace(r.certificate, "Application", "Installer", 1)
 	unsignedPath := r.name + "-unsigned.pkg"
 
 	defer os.RemoveAll(r.name + ".app") // this was the output of package and it can get in the way of future builds
@@ -304,14 +303,14 @@ func (r *Releaser) packageMacOSRelease() error {
 	}
 	defer cleanup()
 
-	cmd := exec.Command("codesign", "-vfs", appCert, "--entitlement", "entitlements.plist", r.name+".app")
+	cmd := execabs.Command("codesign", "-vfs", appCert, "--entitlement", "entitlements.plist", r.name+".app")
 	err = cmd.Run()
 	if err != nil {
 		fyne.LogError("Codesign failed", err)
 		return errors.New("unable to codesign application bundle")
 	}
 
-	cmd = exec.Command("productbuild", "--component", r.name+".app", "/Applications/",
+	cmd = execabs.Command("productbuild", "--component", r.name+".app", "/Applications/",
 		"--product", r.name+".app/Contents/Info.plist", unsignedPath)
 	err = cmd.Run()
 	if err != nil {
@@ -320,7 +319,7 @@ func (r *Releaser) packageMacOSRelease() error {
 	}
 	defer os.Remove(unsignedPath)
 
-	cmd = exec.Command("productsign", "--sign", installCert, unsignedPath, r.name+".pkg")
+	cmd = execabs.Command("productsign", "--sign", installCert, unsignedPath, r.name+".pkg")
 	return cmd.Run()
 }
 
@@ -356,7 +355,7 @@ func (r *Releaser) packageWindowsRelease(outFile string) error {
 		return errors.New("cannot find makeappx.exe, make sure you have installed the Windows SDK")
 	}
 
-	cmd := exec.Command(filepath.Join(binDir, "makeappx.exe"), "pack", "/d", payload, "/p", outFile)
+	cmd := execabs.Command(filepath.Join(binDir, "makeappx.exe"), "pack", "/d", payload, "/p", outFile)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -375,7 +374,7 @@ func (r *Releaser) signAndroid(path string) error {
 	}
 	args = append(args, path)
 
-	cmd := exec.Command(signer, args...)
+	cmd := execabs.Command(signer, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -388,7 +387,7 @@ func (r *Releaser) signWindows(appx string) error {
 		return errors.New("cannot find signtool.exe, make sure you have installed the Windows SDK")
 	}
 
-	cmd := exec.Command(filepath.Join(binDir, "signtool.exe"),
+	cmd := execabs.Command(filepath.Join(binDir, "signtool.exe"),
 		"sign", "/a", "/v", "/fd", "SHA256", "/f", r.certificate, "/p", r.password, appx)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -400,6 +399,11 @@ func (r *Releaser) validate() error {
 	if r.os == "" {
 		r.os = targetOS()
 	}
+	err := r.Packager.validate()
+	if err != nil {
+		return err
+	}
+
 	if util.IsMobile(r.os) || r.os == "windows" {
 		if r.appVersion == "" { // Here it is required, if provided then package validate will check format
 			return errors.New("missing required -appVersion parameter")
@@ -427,6 +431,9 @@ func (r *Releaser) validate() error {
 	} else if r.os == "darwin" {
 		if r.certificate == "" {
 			r.certificate = "3rd Party Mac Developer Application"
+		}
+		if r.profile == "" {
+			return errors.New("missing required -profile parameter for macOS release")
 		}
 		if r.category == "" {
 			return errors.New("missing required -category parameter for macOS release")
@@ -473,7 +480,7 @@ func (r *Releaser) zipAlign(path string) error {
 	}
 
 	cmd := filepath.Join(util.AndroidBuildToolsPath(), "zipalign")
-	err = exec.Command(cmd, "4", unaligned, path).Run()
+	err = execabs.Command(cmd, "4", unaligned, path).Run()
 	if err != nil {
 		_ = os.Rename(path, unaligned) // ignore error, return previous
 		return err
@@ -482,7 +489,7 @@ func (r *Releaser) zipAlign(path string) error {
 }
 
 func findWindowsSDKBin() (string, error) {
-	inPath, err := exec.LookPath("makeappx.exe")
+	inPath, err := execabs.LookPath("makeappx.exe")
 	if err == nil {
 		return inPath, nil
 	}

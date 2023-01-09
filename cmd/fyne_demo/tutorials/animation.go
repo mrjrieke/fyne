@@ -6,6 +6,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -13,7 +14,7 @@ import (
 func makeAnimationScreen(_ fyne.Window) fyne.CanvasObject {
 	curves := makeAnimationCurves()
 	curves.Move(fyne.NewPos(0, 140+theme.Padding()))
-	return fyne.NewContainerWithoutLayout(makeAnimationCanvas(), curves)
+	return container.NewWithoutLayout(makeAnimationCanvas(), curves)
 }
 
 func makeAnimationCanvas() fyne.CanvasObject {
@@ -58,7 +59,7 @@ func makeAnimationCanvas() fyne.CanvasObject {
 	})
 	toggle.Resize(toggle.MinSize())
 	toggle.Move(fyne.NewPos(152, 54))
-	return fyne.NewContainerWithoutLayout(rect, i, toggle)
+	return container.NewWithoutLayout(rect, i, toggle)
 }
 
 func makeAnimationCurves() fyne.CanvasObject {
@@ -75,7 +76,7 @@ func makeAnimationCurves() fyne.CanvasObject {
 	})
 	start.Resize(start.MinSize())
 	start.Move(fyne.NewPos(0, 120+theme.Padding()*4))
-	return fyne.NewContainerWithoutLayout(label1, label2, label3, label4, box1, box2, box3, box4, start)
+	return container.NewWithoutLayout(label1, label2, label3, label4, box1, box2, box3, box4, start)
 }
 
 func makeAnimationCurveItem(label string, curve fyne.AnimationCurve, yOff float32) (
@@ -84,7 +85,7 @@ func makeAnimationCurveItem(label string, curve fyne.AnimationCurve, yOff float3
 	text.Alignment = fyne.TextAlignCenter
 	text.Resize(fyne.NewSize(380, 30))
 	text.Move(fyne.NewPos(0, yOff))
-	box = canvas.NewRectangle(theme.ForegroundColor())
+	box = newThemedBox()
 	box.Resize(fyne.NewSize(30, 30))
 	box.Move(fyne.NewPos(0, yOff))
 
@@ -97,4 +98,47 @@ func makeAnimationCurveItem(label string, curve fyne.AnimationCurve, yOff float3
 	anim.AutoReverse = true
 	anim.RepeatCount = 1
 	return
+}
+
+// themedBox is a simple box that change its background color according
+// to the selected theme
+type themedBox struct {
+	widget.BaseWidget
+}
+
+func newThemedBox() *themedBox {
+	b := &themedBox{}
+	b.ExtendBaseWidget(b)
+	return b
+}
+
+func (b *themedBox) CreateRenderer() fyne.WidgetRenderer {
+	b.ExtendBaseWidget(b)
+	bg := canvas.NewRectangle(theme.ForegroundColor())
+	return &themedBoxRenderer{bg: bg, objects: []fyne.CanvasObject{bg}}
+}
+
+type themedBoxRenderer struct {
+	bg      *canvas.Rectangle
+	objects []fyne.CanvasObject
+}
+
+func (r *themedBoxRenderer) Destroy() {
+}
+
+func (r *themedBoxRenderer) Layout(size fyne.Size) {
+	r.bg.Resize(size)
+}
+
+func (r *themedBoxRenderer) MinSize() fyne.Size {
+	return r.bg.MinSize()
+}
+
+func (r *themedBoxRenderer) Objects() []fyne.CanvasObject {
+	return r.objects
+}
+
+func (r *themedBoxRenderer) Refresh() {
+	r.bg.FillColor = theme.ForegroundColor()
+	r.bg.Refresh()
 }

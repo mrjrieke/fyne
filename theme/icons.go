@@ -3,7 +3,6 @@ package theme
 import (
 	"bytes"
 	"encoding/xml"
-	"fmt"
 	"image/color"
 
 	"fyne.io/fyne/v2"
@@ -199,6 +198,21 @@ const (
 	//
 	// Since: 2.0
 	IconNameMailSend fyne.ThemeIconName = "mailSend"
+
+	// IconNameMediaMusic is the name of theme lookup for media music icon.
+	//
+	// Since: 2.1
+	IconNameMediaMusic fyne.ThemeIconName = "mediaMusic"
+
+	// IconNameMediaPhoto is the name of theme lookup for media photo icon.
+	//
+	// Since: 2.1
+	IconNameMediaPhoto fyne.ThemeIconName = "mediaPhoto"
+
+	// IconNameMediaVideo is the name of theme lookup for media video icon.
+	//
+	// Since: 2.1
+	IconNameMediaVideo fyne.ThemeIconName = "mediaVideo"
 
 	// IconNameMediaFastForward is the name of theme lookup for media fast-forward icon.
 	//
@@ -414,6 +428,31 @@ const (
 	//
 	// Since: 2.0
 	IconNameComputer fyne.ThemeIconName = "computer"
+
+	// IconNameAccount is the name of theme lookup for account icon.
+	//
+	// Since: 2.1
+	IconNameAccount fyne.ThemeIconName = "account"
+
+	// IconNameLogin is the name of theme lookup for login icon.
+	//
+	// Since: 2.1
+	IconNameLogin fyne.ThemeIconName = "login"
+
+	// IconNameLogout is the name of theme lookup for logout icon.
+	//
+	// Since: 2.1
+	IconNameLogout fyne.ThemeIconName = "logout"
+
+	// IconNameList is the name of theme lookup for list icon.
+	//
+	// Since: 2.1
+	IconNameList fyne.ThemeIconName = "list"
+
+	// IconNameGrid is the name of theme lookup for grid icon.
+	//
+	// Since: 2.1
+	IconNameGrid fyne.ThemeIconName = "grid"
 )
 
 var (
@@ -464,6 +503,9 @@ var (
 		IconNameMailReplyAll:   NewThemedResource(mailreplyallIconRes),
 		IconNameMailSend:       NewThemedResource(mailsendIconRes),
 
+		IconNameMediaMusic:        NewThemedResource(mediamusicIconRes),
+		IconNameMediaPhoto:        NewThemedResource(mediaphotoIconRes),
+		IconNameMediaVideo:        NewThemedResource(mediavideoIconRes),
 		IconNameMediaFastForward:  NewThemedResource(mediafastforwardIconRes),
 		IconNameMediaFastRewind:   NewThemedResource(mediafastrewindIconRes),
 		IconNameMediaPause:        NewThemedResource(mediapauseIconRes),
@@ -513,6 +555,13 @@ var (
 		IconNameComputer: NewThemedResource(computerIconRes),
 		IconNameStorage:  NewThemedResource(storageIconRes),
 		IconNameUpload:   NewThemedResource(uploadIconRes),
+
+		IconNameAccount: NewThemedResource(accountIconRes),
+		IconNameLogin:   NewThemedResource(loginIconRes),
+		IconNameLogout:  NewThemedResource(logoutIconRes),
+
+		IconNameList: NewThemedResource(listIconRes),
+		IconNameGrid: NewThemedResource(gridIconRes),
 	}
 )
 
@@ -631,14 +680,14 @@ func (res *PrimaryThemedResource) Original() fyne.Resource {
 }
 
 // DisabledResource is a resource wrapper that will return an appropriate resource colorized by
-// the current theme's `DisabledIconColor` color.
+// the current theme's `DisabledColor` color.
 type DisabledResource struct {
 	source fyne.Resource
 }
 
 // Name returns the resource source name prefixed with `disabled_` (used for caching)
 func (res *DisabledResource) Name() string {
-	return fmt.Sprintf("disabled_%s", res.source.Name())
+	return "disabled_" + res.source.Name()
 }
 
 // Content returns the disabled style content of the correct resource for the current theme
@@ -646,7 +695,7 @@ func (res *DisabledResource) Content() []byte {
 	return colorizeResource(res.source, DisabledColor())
 }
 
-// NewDisabledResource creates a resource that adapts to the current theme's DisabledIconColor setting.
+// NewDisabledResource creates a resource that adapts to the current theme's DisabledColor setting.
 func NewDisabledResource(res fyne.Resource) *DisabledResource {
 	return &DisabledResource{
 		source: res,
@@ -932,6 +981,27 @@ func MailSendIcon() fyne.Resource {
 	return safeIconLookup(IconNameMailSend)
 }
 
+// MediaMusicIcon returns a resource containing the standard media music icon for the current theme
+//
+// Since: 2.1
+func MediaMusicIcon() fyne.Resource {
+	return safeIconLookup(IconNameMediaMusic)
+}
+
+// MediaPhotoIcon returns a resource containing the standard media photo icon for the current theme
+//
+// Since: 2.1
+func MediaPhotoIcon() fyne.Resource {
+	return safeIconLookup(IconNameMediaPhoto)
+}
+
+// MediaVideoIcon returns a resource containing the standard media video icon for the current theme
+//
+// Since: 2.1
+func MediaVideoIcon() fyne.Resource {
+	return safeIconLookup(IconNameMediaVideo)
+}
+
 // MediaFastForwardIcon returns a resource containing the standard media fast-forward icon for the current theme
 func MediaFastForwardIcon() fyne.Resource {
 	return safeIconLookup(IconNameMediaFastForward)
@@ -1037,12 +1107,12 @@ func ZoomOutIcon() fyne.Resource {
 	return safeIconLookup(IconNameViewZoomOut)
 }
 
-// VisibilityIcon returns a resource containing the standard visibity icon for the current theme
+// VisibilityIcon returns a resource containing the standard visibility icon for the current theme
 func VisibilityIcon() fyne.Resource {
 	return safeIconLookup(IconNameVisibility)
 }
 
-// VisibilityOffIcon returns a resource containing the standard visibity off icon for the current theme
+// VisibilityOffIcon returns a resource containing the standard visibility off icon for the current theme
 func VisibilityOffIcon() fyne.Resource {
 	return safeIconLookup(IconNameVisibilityOff)
 }
@@ -1080,6 +1150,31 @@ func StorageIcon() fyne.Resource {
 // UploadIcon returns a resource containing the standard upload icon for the current theme
 func UploadIcon() fyne.Resource {
 	return safeIconLookup(IconNameUpload)
+}
+
+// AccountIcon returns a resource containing the standard account icon for the current theme
+func AccountIcon() fyne.Resource {
+	return safeIconLookup(IconNameAccount)
+}
+
+// LoginIcon returns a resource containing the standard login icon for the current theme
+func LoginIcon() fyne.Resource {
+	return safeIconLookup(IconNameLogin)
+}
+
+// LogoutIcon returns a resource containing the standard logout icon for the current theme
+func LogoutIcon() fyne.Resource {
+	return safeIconLookup(IconNameLogout)
+}
+
+// ListIcon returns a resource containing the standard list icon for the current theme
+func ListIcon() fyne.Resource {
+	return safeIconLookup(IconNameList)
+}
+
+// GridIcon returns a resource containing the standard grid icon for the current theme
+func GridIcon() fyne.Resource {
+	return safeIconLookup(IconNameGrid)
 }
 
 func safeIconLookup(n fyne.ThemeIconName) fyne.Resource {

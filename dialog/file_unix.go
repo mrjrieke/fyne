@@ -1,4 +1,5 @@
-// +build !windows,!android,!ios
+//go:build !windows && !android && !ios && !wasm && !js
+// +build !windows,!android,!ios,!wasm,!js
 
 package dialog
 
@@ -10,15 +11,17 @@ import (
 	"fyne.io/fyne/v2/theme"
 )
 
-func (f *fileDialog) loadPlaces() []fyne.CanvasObject {
-	return []fyne.CanvasObject{makeFavoriteButton("Computer", theme.ComputerIcon(), func() {
-		lister, err := storage.ListerForURI(storage.NewURI("file:///"))
-		if err != nil {
-			fyne.LogError("could not create lister for /", err)
-			return
-		}
-		f.setLocation(lister)
-	})}
+func (f *fileDialog) getPlaces() []favoriteItem {
+	lister, err := storage.ListerForURI(storage.NewFileURI("/"))
+	if err != nil {
+		fyne.LogError("could not create lister for /", err)
+		return []favoriteItem{}
+	}
+	return []favoriteItem{{
+		"Computer",
+		theme.ComputerIcon(),
+		lister,
+	}}
 }
 
 func isHidden(file fyne.URI) bool {

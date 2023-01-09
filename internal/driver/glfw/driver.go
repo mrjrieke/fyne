@@ -3,15 +3,21 @@
 package glfw
 
 import (
+	"bytes"
+	"image"
 	"os"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 
+	ico "github.com/Kodeworks/golang-image-ico"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/internal/animation"
+	intapp "fyne.io/fyne/v2/internal/app"
 	"fyne.io/fyne/v2/internal/driver"
+	"fyne.io/fyne/v2/internal/driver/common"
 	"fyne.io/fyne/v2/internal/painter"
 	intRepo "fyne.io/fyne/v2/internal/repository"
 	"fyne.io/fyne/v2/storage/repository"
@@ -20,9 +26,8 @@ import (
 const mainGoroutineID = 1
 
 var (
-	canvasMutex sync.RWMutex
-	canvases    = make(map[fyne.CanvasObject]fyne.Canvas)
-	isWayland   = false
+	curWindow *window
+	isWayland = false
 )
 
 // Declare conformity with Driver
@@ -36,16 +41,35 @@ type gLDriver struct {
 	drawDone   chan interface{}
 
 	animation *animation.Runner
+
+	drawOnMainThread    bool   // A workaround on Apple M1, just use 1 thread until fixed upstream
+	trayStart, trayStop func() // shut down the system tray, if used
 }
 
-func (d *gLDriver) RenderedTextSize(text string, size float32, style fyne.TextStyle) fyne.Size {
-	return painter.RenderedTextSize(text, size, style)
+func toOSIcon(icon fyne.Resource) ([]byte, error) {
+	if runtime.GOOS != "windows" {
+		return icon.Content(), nil
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(icon.Content()))
+	if err != nil {
+		return nil, err
+	}
+
+	buf := &bytes.Buffer{}
+	err = ico.Encode(buf, img)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (d *gLDriver) RenderedTextSize(text string, textSize float32, style fyne.TextStyle) (size fyne.Size, baseline float32) {
+	return painter.RenderedTextSize(text, textSize, style)
 }
 
 func (d *gLDriver) CanvasForObject(obj fyne.CanvasObject) fyne.Canvas {
-	canvasMutex.RLock()
-	defer canvasMutex.RUnlock()
-	return canvases[obj]
+	return common.CanvasForObject(obj)
 }
 
 func (d *gLDriver) AbsolutePositionForObject(co fyne.CanvasObject) fyne.Position {
@@ -55,7 +79,7 @@ func (d *gLDriver) AbsolutePositionForObject(co fyne.CanvasObject) fyne.Position
 	}
 
 	glc := c.(*glCanvas)
-	return driver.AbsolutePositionForObject(co, glc.objectTrees())
+	return driver.AbsolutePositionForObject(co, glc.ObjectTrees())
 }
 
 func (d *gLDriver) Device() fyne.Device {
@@ -67,17 +91,17 @@ func (d *gLDriver) Device() fyne.Device {
 }
 
 func (d *gLDriver) Quit() {
+	if curWindow != nil {
+		curWindow = nil
+		if d.trayStop != nil {
+			d.trayStop()
+		}
+		fyne.CurrentApp().Lifecycle().(*intapp.Lifecycle).TriggerExitedForeground()
+	}
 	defer func() {
 		recover() // we could be called twice - no safe way to check if d.done is closed
 	}()
 	close(d.done)
-}
-
-func (d *gLDriver) Run() {
-	if goroutineID() != mainGoroutineID {
-		panic("Run() or ShowAndRun() must be called from main goroutine")
-	}
-	d.runGL()
 }
 
 func (d *gLDriver) addWindow(w *window) {
@@ -117,9 +141,12 @@ func (d *gLDriver) windowList() []fyne.Window {
 func (d *gLDriver) initFailed(msg string, err error) {
 	fyne.LogError(msg, err)
 
-	if running() {
+	run.Lock()
+	if !run.flag {
+		run.Unlock()
 		d.Quit()
 	} else {
+		run.Unlock()
 		os.Exit(1)
 	}
 }

@@ -57,7 +57,7 @@ typedef VkBool32 (APIENTRY *PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR
 #include "osmesa_context.h"
 
 #include "wayland-xdg-shell-client-protocol.h"
-#include "wayland-xdg-decoration-unstable-v1-client-protocol.h"
+#include "wayland-xdg-decoration-client-protocol.h"
 #include "wayland-viewporter-client-protocol.h"
 #include "wayland-relative-pointer-unstable-v1-client-protocol.h"
 #include "wayland-pointer-constraints-unstable-v1-client-protocol.h"
@@ -158,7 +158,6 @@ typedef enum _GLFWdecorationSideWayland
     leftDecoration,
     rightDecoration,
     bottomDecoration,
-
 } _GLFWdecorationSideWayland;
 
 typedef struct _GLFWdecorationWayland
@@ -166,7 +165,6 @@ typedef struct _GLFWdecorationWayland
     struct wl_surface*          surface;
     struct wl_subsurface*       subsurface;
     struct wp_viewport*         viewport;
-
 } _GLFWdecorationWayland;
 
 // Wayland-specific per-window data
@@ -216,7 +214,6 @@ typedef struct _GLFWwindowWayland
         _GLFWdecorationWayland             top, left, right, bottom;
         int                                focus;
     } decorations;
-
 } _GLFWwindowWayland;
 
 // Wayland-specific global data
@@ -252,6 +249,7 @@ typedef struct _GLFWlibraryWayland
     const char*                 cursorPreviousName;
     int                         cursorTimerfd;
     uint32_t                    serial;
+    uint32_t                    pointerEnterSerial;
 
     int32_t                     keyboardRepeatRate;
     int32_t                     keyboardRepeatDelay;
@@ -325,7 +323,6 @@ typedef struct _GLFWlibraryWayland
         PFN_wl_egl_window_destroy window_destroy;
         PFN_wl_egl_window_resize window_resize;
     } egl;
-
 } _GLFWlibraryWayland;
 
 // Wayland-specific per-monitor data
@@ -339,7 +336,6 @@ typedef struct _GLFWmonitorWayland
     int                         x;
     int                         y;
     int                         scale;
-
 } _GLFWmonitorWayland;
 
 // Wayland-specific per-cursor data

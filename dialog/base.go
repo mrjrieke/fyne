@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	col "fyne.io/fyne/v2/internal/color"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -129,7 +130,7 @@ func (d *dialog) Resize(size fyne.Size) {
 	d.win.Resize(size)
 }
 
-// SetDismissText allows custom text to be set in the confirmation button
+// SetDismissText allows custom text to be set in the dismiss button
 func (d *dialog) SetDismissText(label string) {
 	d.dismiss.SetText(label)
 	d.win.Refresh()
@@ -247,7 +248,7 @@ func (renderer *themedBackgroundRenderer) Objects() []fyne.CanvasObject {
 }
 
 func (renderer *themedBackgroundRenderer) Refresh() {
-	r, g, b, _ := theme.BackgroundColor().RGBA()
+	r, g, b, _ := col.ToNRGBA(theme.BackgroundColor())
 	bg := &color.NRGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 230}
 	renderer.rect.FillColor = bg
 }

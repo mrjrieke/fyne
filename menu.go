@@ -20,6 +20,12 @@ type MenuItem struct {
 	IsSeparator bool
 	Label       string
 	Action      func()
+	// Since: 2.1
+	Disabled bool
+	// Since: 2.1
+	Checked bool
+	// Since: 2.2
+	Shortcut Shortcut
 }
 
 // NewMenuItem creates a new menu item from the passed label and action parameters.
@@ -40,5 +46,5 @@ type MainMenu struct {
 // NewMainMenu creates a top level menu structure used by fyne.Window for displaying a menubar
 // (or appropriate equivalent).
 func NewMainMenu(items ...*Menu) *MainMenu {
-	return &MainMenu{items}
+	return &MainMenu{Items: items}
 }

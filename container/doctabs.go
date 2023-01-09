@@ -1,6 +1,8 @@
 package container
 
 import (
+	"image/color"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/layout"
@@ -27,8 +29,9 @@ type DocTabs struct {
 	OnSelected     func(*TabItem)
 	OnUnselected   func(*TabItem)
 
-	current  int
-	location TabLocation
+	current         int
+	location        TabLocation
+	isTransitioning bool
 
 	popUpMenu *widget.PopUpMenu
 }
@@ -61,19 +64,12 @@ func (t *DocTabs) CreateRenderer() fyne.WidgetRenderer {
 			buttonCache: make(map[*TabItem]*tabButton),
 		},
 		docTabs:  t,
-		scroller: &Scroll{},
+		scroller: NewScroll(&fyne.Container{}),
 	}
 	r.action = r.buildAllTabsButton()
 	r.create = r.buildCreateTabsButton()
 	r.box = NewHBox(r.create, r.action)
-	var lastX, lastY float32
 	r.scroller.OnScrolled = func(offset fyne.Position) {
-		// FIXME OnScrolled can be called when the offset hasn't changed (#1868)
-		if offset.X == lastX && offset.Y == lastY {
-			return
-		}
-		lastX = offset.X
-		lastY = offset.Y
 		r.updateIndicator(false)
 	}
 	r.updateAllTabs()
@@ -137,7 +133,7 @@ func (t *DocTabs) SelectedIndex() int {
 	return t.current
 }
 
-// SetItems sets the container’s items and refreshes.
+// SetItems sets the containers items and refreshes.
 func (t *DocTabs) SetItems(items []*TabItem) {
 	setItems(t, items)
 	t.Refresh()
@@ -145,7 +141,7 @@ func (t *DocTabs) SetItems(items []*TabItem) {
 
 // SetTabLocation sets the location of the tab bar
 func (t *DocTabs) SetTabLocation(l TabLocation) {
-	t.location = l
+	t.location = tabsAdjustedLocation(l)
 	t.Refresh()
 }
 
@@ -193,8 +189,16 @@ func (t *DocTabs) setSelected(selected int) {
 	t.current = selected
 }
 
+func (t *DocTabs) setTransitioning(transitioning bool) {
+	t.isTransitioning = transitioning
+}
+
 func (t *DocTabs) tabLocation() TabLocation {
 	return t.location
+}
+
+func (t *DocTabs) transitioning() bool {
+	return t.isTransitioning
 }
 
 // Declare conformity with WidgetRenderer interface.
@@ -214,7 +218,10 @@ func (r *docTabsRenderer) Layout(size fyne.Size) {
 	r.updateCreateTab()
 	r.updateTabs()
 	r.layout(r.docTabs, size)
-	r.updateIndicator(true)
+	r.updateIndicator(r.docTabs.transitioning())
+	if r.docTabs.transitioning() {
+		r.docTabs.setTransitioning(false)
+	}
 }
 
 func (r *docTabsRenderer) MinSize() fyne.Size {
@@ -241,27 +248,27 @@ func (r *docTabsRenderer) Refresh() {
 }
 
 func (r *docTabsRenderer) buildAllTabsButton() (all *widget.Button) {
-	all = widget.NewButton("", func() {
+	all = &widget.Button{Importance: widget.LowImportance, OnTapped: func() {
 		// Show pop up containing all tabs
 
-		var items []*fyne.MenuItem
+		items := make([]*fyne.MenuItem, len(r.docTabs.Items))
 		for i := 0; i < len(r.docTabs.Items); i++ {
-			item := r.docTabs.Items[i]
+			index := i // capture
 			// FIXME MenuItem doesn't support icons (#1752)
-			// FIXME MenuItem can't show if it is the currently selected tab (#1753)
-			items = append(items, fyne.NewMenuItem(item.Text, func() {
-				r.docTabs.Select(item)
+			items[i] = fyne.NewMenuItem(r.docTabs.Items[i].Text, func() {
+				r.docTabs.SelectIndex(index)
 				if r.docTabs.popUpMenu != nil {
 					r.docTabs.popUpMenu.Hide()
 					r.docTabs.popUpMenu = nil
 				}
-			}))
+			})
+			items[i].Checked = index == r.docTabs.current
 		}
 
 		r.docTabs.popUpMenu = buildPopUpMenu(r.docTabs, all, items)
-	})
-	all.Importance = widget.LowImportance
-	return
+	}}
+
+	return all
 }
 
 func (r *docTabsRenderer) buildCreateTabsButton() *widget.Button {
@@ -277,8 +284,8 @@ func (r *docTabsRenderer) buildCreateTabsButton() *widget.Button {
 	return create
 }
 
-func (r *docTabsRenderer) buildTabButtons(count int) *fyne.Container {
-	buttons := &fyne.Container{}
+func (r *docTabsRenderer) buildTabButtons(count int, buttons *fyne.Container) {
+	buttons.Objects = nil
 
 	var iconPos buttonIconPosition
 	if fyne.CurrentDevice().IsMobile() {
@@ -286,7 +293,11 @@ func (r *docTabsRenderer) buildTabButtons(count int) *fyne.Container {
 		if cells == 0 {
 			cells = 1
 		}
-		buttons.Layout = layout.NewGridLayout(cells)
+		if r.docTabs.location == TabLocationTop || r.docTabs.location == TabLocationBottom {
+			buttons.Layout = layout.NewGridLayoutWithColumns(cells)
+		} else {
+			buttons.Layout = layout.NewGridLayoutWithRows(cells)
+		}
 		iconPos = buttonIconTop
 	} else if r.docTabs.location == TabLocationLeading || r.docTabs.location == TabLocationTrailing {
 		buttons.Layout = layout.NewVBoxLayout()
@@ -319,7 +330,6 @@ func (r *docTabsRenderer) buildTabButtons(count int) *fyne.Container {
 		button.Refresh()
 		buttons.Objects = append(buttons.Objects, button)
 	}
-	return buttons
 }
 
 func (r *docTabsRenderer) scrollToSelected() {
@@ -343,11 +353,12 @@ func (r *docTabsRenderer) scrollToSelected() {
 		}
 	}
 	r.scroller.Offset = offset
+	r.updateIndicator(false)
 }
 
 func (r *docTabsRenderer) updateIndicator(animate bool) {
 	if r.docTabs.current < 0 {
-		r.indicator.Hide()
+		r.indicator.FillColor = color.Transparent
 		r.indicator.Refresh()
 		return
 	}
@@ -357,7 +368,12 @@ func (r *docTabsRenderer) updateIndicator(animate bool) {
 
 	buttons := r.scroller.Content.(*fyne.Container).Objects
 
-	if r.docTabs.current >= 0 {
+	if r.docTabs.current >= len(buttons) {
+		if a := r.action; a != nil {
+			selectedPos = a.Position()
+			selectedSize = a.Size()
+		}
+	} else {
 		selected := buttons[r.docTabs.current]
 		selectedPos = selected.Position()
 		selectedSize = selected.Size()
@@ -393,7 +409,7 @@ func (r *docTabsRenderer) updateIndicator(animate bool) {
 		indicatorPos.Y = 0
 	}
 	if indicatorSize.Width < 0 || indicatorSize.Height < 0 {
-		r.indicator.Hide()
+		r.indicator.FillColor = color.Transparent
 		r.indicator.Refresh()
 		return
 	}
@@ -420,8 +436,7 @@ func (r *docTabsRenderer) updateCreateTab() {
 
 func (r *docTabsRenderer) updateTabs() {
 	tabCount := len(r.docTabs.Items)
-
-	r.scroller.Content = r.buildTabButtons(tabCount)
+	r.buildTabButtons(tabCount, r.scroller.Content.(*fyne.Container))
 
 	// Set layout of tab bar containing tab buttons and overflow action
 	if r.docTabs.location == TabLocationLeading || r.docTabs.location == TabLocationTrailing {

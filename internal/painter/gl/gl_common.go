@@ -1,20 +1,26 @@
+//go:generate fyne bundle -o shaders.go --prefix shader --package gl shaders/
+
 package gl
 
 import (
+	"fmt"
 	"image"
 	"log"
 	"runtime"
 
-	"github.com/goki/freetype"
 	"github.com/goki/freetype/truetype"
-	"golang.org/x/image/font"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/internal/cache"
 	"fyne.io/fyne/v2/internal/painter"
+	"fyne.io/fyne/v2/theme"
 )
 
-var textures = make(map[fyne.CanvasObject]Texture, 1024)
+// Texture represents an uploaded GL texture
+type Texture cache.TextureType
+
+var noTexture = Texture(cache.NoTexture)
 
 func logGLError(err uint32) {
 	if err == 0 {
@@ -28,26 +34,22 @@ func logGLError(err uint32) {
 	}
 }
 
-func getTexture(object fyne.CanvasObject, creator func(canvasObject fyne.CanvasObject) Texture) Texture {
-	texture, ok := textures[object]
+func (p *glPainter) getTexture(object fyne.CanvasObject, creator func(canvasObject fyne.CanvasObject) Texture) (Texture, error) {
+	texture, ok := cache.GetTexture(object)
 
 	if !ok {
-		texture = creator(object)
-		textures[object] = texture
+		texture = cache.TextureType(creator(object))
+		cache.SetTexture(object, texture, p.canvas)
 	}
-	return texture
+	if !cache.IsValid(texture) {
+		return noTexture, fmt.Errorf("no texture available")
+	}
+	return Texture(texture), nil
 }
 
 func (p *glPainter) newGlCircleTexture(obj fyne.CanvasObject) Texture {
 	circle := obj.(*canvas.Circle)
 	raw := painter.DrawCircle(circle, painter.VectorPad(circle), p.textureScale)
-
-	return p.imgToTexture(raw, canvas.ImageScaleSmooth)
-}
-
-func (p *glPainter) newGlLineTexture(obj fyne.CanvasObject) Texture {
-	line := obj.(*canvas.Line)
-	raw := painter.DrawLine(line, painter.VectorPad(line), p.textureScale)
 
 	return p.imgToTexture(raw, canvas.ImageScaleSmooth)
 }
@@ -58,7 +60,7 @@ func (p *glPainter) newGlRectTexture(obj fyne.CanvasObject) Texture {
 		return p.newGlStrokedRectTexture(rect)
 	}
 	if rect.FillColor == nil {
-		return NoTexture
+		return noTexture
 	}
 	return p.imgToTexture(image.NewUniform(rect.FillColor), canvas.ImageScaleSmooth)
 }
@@ -72,6 +74,10 @@ func (p *glPainter) newGlStrokedRectTexture(obj fyne.CanvasObject) Texture {
 
 func (p *glPainter) newGlTextTexture(obj fyne.CanvasObject) Texture {
 	text := obj.(*canvas.Text)
+	color := text.Color
+	if color == nil {
+		color = theme.ForegroundColor()
+	}
 
 	bounds := text.MinSize()
 	width := int(p.textureScale(bounds.Width))
@@ -84,13 +90,7 @@ func (p *glPainter) newGlTextTexture(obj fyne.CanvasObject) Texture {
 	opts.DPI = float64(painter.TextDPI * p.texScale)
 	face := painter.CachedFontFace(text.TextStyle, &opts)
 
-	d := font.Drawer{}
-	d.Dst = img
-	d.Src = &image.Uniform{C: text.Color}
-	d.Face = face
-	d.Dot = freetype.Pt(0, height-face.Metrics().Descent.Ceil())
-	d.DrawString(text.Text)
-
+	painter.DrawString(img, text.Text, color, face, height, text.TextStyle.TabWidth)
 	return p.imgToTexture(img, canvas.ImageScaleSmooth)
 }
 
@@ -102,7 +102,7 @@ func (p *glPainter) newGlImageTexture(obj fyne.CanvasObject) Texture {
 
 	tex := painter.PaintImage(img, p.canvas, int(width), int(height))
 	if tex == nil {
-		return NoTexture
+		return noTexture
 	}
 
 	return p.imgToTexture(tex, img.ScaleMode)
@@ -120,8 +120,16 @@ func (p *glPainter) newGlRasterTexture(obj fyne.CanvasObject) Texture {
 func (p *glPainter) newGlLinearGradientTexture(obj fyne.CanvasObject) Texture {
 	gradient := obj.(*canvas.LinearGradient)
 
-	width := p.textureScale(gradient.Size().Width)
-	height := p.textureScale(gradient.Size().Height)
+	w := gradient.Size().Width
+	h := gradient.Size().Height
+	switch gradient.Angle {
+	case 90, 270:
+		h = 1
+	case 0, 180:
+		w = 1
+	}
+	width := p.textureScale(w)
+	height := p.textureScale(h)
 
 	return p.imgToTexture(gradient.Generate(int(width), int(height)), canvas.ImageScaleSmooth)
 }

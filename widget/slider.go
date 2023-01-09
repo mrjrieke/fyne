@@ -7,7 +7,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/data/binding"
-	"fyne.io/fyne/v2/internal/cache"
 	"fyne.io/fyne/v2/internal/widget"
 	"fyne.io/fyne/v2/theme"
 )
@@ -35,8 +34,7 @@ type Slider struct {
 	Orientation Orientation
 	OnChanged   func(float64)
 
-	valueSource   binding.Float
-	valueListener binding.DataListener
+	binder basicBinder
 }
 
 // NewSlider returns a basic slider.
@@ -68,27 +66,11 @@ func NewSliderWithData(min, max float64, data binding.Float) *Slider {
 //
 // Since: 2.0
 func (s *Slider) Bind(data binding.Float) {
-	s.Unbind()
-	s.valueSource = data
+	s.binder.SetCallback(s.updateFromData)
+	s.binder.Bind(data)
 
-	s.valueListener = binding.NewDataListener(func() {
-		val, err := data.Get()
-		if err != nil {
-			fyne.LogError("Error getting current data value", err)
-			return
-		}
-		s.Value = val
-		if cache.IsRendered(s) { // don't invalidate values set after constructor like Step
-			s.Refresh()
-		}
-	})
-	data.AddListener(s.valueListener)
-
-	s.OnChanged = func(f float64) {
-		err := data.Set(f)
-		if err != nil {
-			fyne.LogError(fmt.Sprintf("Failed to set binding value to %f", f), err)
-		}
+	s.OnChanged = func(_ float64) {
+		s.binder.CallWithData(s.writeData)
 	}
 }
 
@@ -104,7 +86,7 @@ func (s *Slider) Dragged(e *fyne.DragEvent) {
 
 	s.updateValue(ratio)
 
-	if lastValue == s.Value {
+	if s.almostEqual(lastValue, s.Value) {
 		return
 	}
 
@@ -163,10 +145,15 @@ func (s *Slider) clampValueToRange() {
 		return
 	}
 
-	i := -(math.Log10(s.Step))
-	p := math.Pow(10, i)
-
-	s.Value = float64(int(s.Value*p)) / p
+	rem := math.Mod(s.Value, s.Step)
+	if rem == 0 {
+		return
+	}
+	min := s.Value - rem
+	if rem > s.Step/2 {
+		min += s.Step
+	}
+	s.Value = min
 }
 
 func (s *Slider) updateValue(ratio float64) {
@@ -186,7 +173,7 @@ func (s *Slider) SetValue(value float64) {
 	s.Value = value
 	s.clampValueToRange()
 
-	if lastValue == s.Value {
+	if s.almostEqual(lastValue, s.Value) {
 		return
 	}
 
@@ -219,19 +206,55 @@ func (s *Slider) CreateRenderer() fyne.WidgetRenderer {
 	return slide
 }
 
+func (s *Slider) almostEqual(a, b float64) bool {
+	delta := math.Abs(a - b)
+	return delta <= s.Step/2
+}
+
+func (s *Slider) updateFromData(data binding.DataItem) {
+	if data == nil {
+		return
+	}
+	floatSource, ok := data.(binding.Float)
+	if !ok {
+		return
+	}
+
+	val, err := floatSource.Get()
+	if err != nil {
+		fyne.LogError("Error getting current data value", err)
+		return
+	}
+	s.SetValue(val) // if val != s.Value, this will call updateFromData again, but only once
+}
+
+func (s *Slider) writeData(data binding.DataItem) {
+	if data == nil {
+		return
+	}
+	floatTarget, ok := data.(binding.Float)
+	if !ok {
+		return
+	}
+	currentValue, err := floatTarget.Get()
+	if err != nil {
+		return
+	}
+	if s.Value != currentValue {
+		err := floatTarget.Set(s.Value)
+		if err != nil {
+			fyne.LogError(fmt.Sprintf("Failed to set binding value to %f", s.Value), err)
+		}
+	}
+}
+
 // Unbind disconnects any configured data source from this Slider.
 // The current value will remain at the last value of the data source.
 //
 // Since: 2.0
 func (s *Slider) Unbind() {
 	s.OnChanged = nil
-	if s.valueSource == nil || s.valueListener == nil {
-		return
-	}
-
-	s.valueSource.RemoveListener(s.valueListener)
-	s.valueListener = nil
-	s.valueSource = nil
+	s.binder.Unbind()
 }
 
 const (

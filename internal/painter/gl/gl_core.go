@@ -1,10 +1,12 @@
-// +build !gles,!arm,!arm64,!android,!ios,!mobile darwin,!mobile,!ios
+//go:build (!gles && !arm && !arm64 && !android && !ios && !mobile && !js && !test_web_driver && !wasm) || (darwin && !mobile && !ios)
+// +build !gles,!arm,!arm64,!android,!ios,!mobile,!js,!test_web_driver,!wasm darwin,!mobile,!ios
 
 package gl
 
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	"strings"
 
@@ -12,6 +14,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/internal/cache"
 	"fyne.io/fyne/v2/theme"
 )
 
@@ -20,12 +23,6 @@ type Buffer uint32
 
 // Program represents a compiled GL program
 type Program uint32
-
-// Texture represents an uploaded GL texture
-type Texture uint32
-
-// NoTexture is the zero value for a Texture
-var NoTexture = Texture(0)
 
 var textureFilterToGL = []int32{gl.LINEAR, gl.NEAREST, gl.LINEAR}
 
@@ -85,15 +82,15 @@ func (p *glPainter) SetOutputSize(width, height int) {
 }
 
 func (p *glPainter) freeTexture(obj fyne.CanvasObject) {
-	texture, ok := textures[obj]
+	texture, ok := cache.GetTexture(obj)
 	if !ok {
 		return
 	}
 
-	tex := uint32(texture)
+	tex := texture
 	gl.DeleteTextures(1, &tex)
 	logError()
-	delete(textures, obj)
+	cache.DeleteTexture(obj)
 }
 
 func glInit() {
@@ -118,53 +115,52 @@ func compileShader(source string, shaderType uint32) (uint32, error) {
 	gl.CompileShader(shader)
 	logError()
 
+	var logLength int32
+	gl.GetShaderiv(shader, gl.INFO_LOG_LENGTH, &logLength)
+	info := strings.Repeat("\x00", int(logLength+1))
+	gl.GetShaderInfoLog(shader, logLength, nil, gl.Str(info))
+
 	var status int32
 	gl.GetShaderiv(shader, gl.COMPILE_STATUS, &status)
 	if status == gl.FALSE {
-		var logLength int32
-		gl.GetShaderiv(shader, gl.INFO_LOG_LENGTH, &logLength)
+		return 0, fmt.Errorf("failed to compile OpenGL shader:\n%s\n>>> SHADER SOURCE\n%s\n<<< SHADER SOURCE", info, source)
+	}
 
-		info := strings.Repeat("\x00", int(logLength+1))
-		gl.GetShaderInfoLog(shader, logLength, nil, gl.Str(info))
-
-		return 0, fmt.Errorf("failed to compile %v: %v", source, info)
+	if logLength > 0 {
+		fmt.Printf("OpenGL shader compilation output:\n%s\n>>> SHADER SOURCE\n%s\n<<< SHADER SOURCE\n", info, source)
 	}
 
 	return shader, nil
 }
 
-const (
-	vertexShaderSource = `
-    #version 110
-    attribute vec3 vert;
-    attribute vec2 vertTexCoord;
-    varying vec2 fragTexCoord;
-
-    void main() {
-        fragTexCoord = vertTexCoord;
-
-        gl_Position = vec4(vert, 1);
-    }
-` + "\x00"
-
-	fragmentShaderSource = `
-    #version 110
-    uniform sampler2D tex;
-
-    varying vec2 fragTexCoord;
-
-    void main() {
-        gl_FragColor = texture2D(tex, fragTexCoord);
-    }
-` + "\x00"
-)
-
 func (p *glPainter) Init() {
-	vertexShader, err := compileShader(vertexShaderSource, gl.VERTEX_SHADER)
+	p.program = createProgram("simple")
+	p.lineProgram = createProgram("line")
+}
+
+func createProgram(shaderFilename string) Program {
+	var vertexSrc []byte
+	var fragmentSrc []byte
+
+	// Why a switch over a filename?
+	// Because this allows for a minimal change, once we reach Go 1.16 and use go:embed instead of
+	// fyne bundle.
+	switch shaderFilename {
+	case "line":
+		vertexSrc = shaderLineVert.StaticContent
+		fragmentSrc = shaderLineFrag.StaticContent
+	case "simple":
+		vertexSrc = shaderSimpleVert.StaticContent
+		fragmentSrc = shaderSimpleFrag.StaticContent
+	default:
+		panic("shader not found: " + shaderFilename)
+	}
+
+	vertexShader, err := compileShader(string(vertexSrc)+"\x00", gl.VERTEX_SHADER)
 	if err != nil {
 		panic(err)
 	}
-	fragmentShader, err := compileShader(fragmentShaderSource, gl.FRAGMENT_SHADER)
+	fragmentShader, err := compileShader(string(fragmentSrc)+"\x00", gl.FRAGMENT_SHADER)
 	if err != nil {
 		panic(err)
 	}
@@ -173,9 +169,27 @@ func (p *glPainter) Init() {
 	gl.AttachShader(prog, vertexShader)
 	gl.AttachShader(prog, fragmentShader)
 	gl.LinkProgram(prog)
-	logError()
 
-	p.program = Program(prog)
+	var logLength int32
+	gl.GetProgramiv(prog, gl.INFO_LOG_LENGTH, &logLength)
+	info := strings.Repeat("\x00", int(logLength+1))
+	gl.GetProgramInfoLog(prog, logLength, nil, gl.Str(info))
+
+	var status int32
+	gl.GetProgramiv(prog, gl.LINK_STATUS, &status)
+	if status == gl.FALSE {
+		panic(fmt.Errorf("failed to link OpenGL program:\n%s", info))
+	}
+
+	if logLength > 0 {
+		fmt.Printf("OpenGL program linking output:\n%s\n", info)
+	}
+
+	if glErr := gl.GetError(); glErr != 0 {
+		panic(fmt.Sprintf("failed to link OpenGL program; error code: %x", glErr))
+	}
+
+	return Program(prog)
 }
 
 func (p *glPainter) glClearBuffer() {
@@ -201,6 +215,8 @@ func (p *glPainter) glScissorClose() {
 }
 
 func (p *glPainter) glCreateBuffer(points []float32) Buffer {
+	gl.UseProgram(uint32(p.program))
+
 	var vbo uint32
 	gl.GenBuffers(1, &vbo)
 	logError()
@@ -211,12 +227,36 @@ func (p *glPainter) glCreateBuffer(points []float32) Buffer {
 
 	vertAttrib := uint32(gl.GetAttribLocation(uint32(p.program), gl.Str("vert\x00")))
 	gl.EnableVertexAttribArray(vertAttrib)
-	gl.VertexAttribPointer(vertAttrib, 3, gl.FLOAT, false, 5*4, gl.PtrOffset(0))
+	gl.VertexAttribPointerWithOffset(vertAttrib, 3, gl.FLOAT, false, 5*4, 0)
 	logError()
 
 	texCoordAttrib := uint32(gl.GetAttribLocation(uint32(p.program), gl.Str("vertTexCoord\x00")))
 	gl.EnableVertexAttribArray(texCoordAttrib)
-	gl.VertexAttribPointer(texCoordAttrib, 2, gl.FLOAT, false, 5*4, gl.PtrOffset(12))
+	gl.VertexAttribPointerWithOffset(texCoordAttrib, 2, gl.FLOAT, false, 5*4, 12)
+	logError()
+
+	return Buffer(vbo)
+}
+
+func (p *glPainter) glCreateLineBuffer(points []float32) Buffer {
+	gl.UseProgram(uint32(p.lineProgram))
+
+	var vbo uint32
+	gl.GenBuffers(1, &vbo)
+	logError()
+	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
+	logError()
+	gl.BufferData(gl.ARRAY_BUFFER, 4*len(points), gl.Ptr(points), gl.STATIC_DRAW)
+	logError()
+
+	vertAttrib := uint32(gl.GetAttribLocation(uint32(p.lineProgram), gl.Str("vert\x00")))
+	gl.EnableVertexAttribArray(vertAttrib)
+	gl.VertexAttribPointerWithOffset(vertAttrib, 2, gl.FLOAT, false, 4*4, 0)
+	logError()
+
+	normalAttrib := uint32(gl.GetAttribLocation(uint32(p.lineProgram), gl.Str("normal\x00")))
+	gl.EnableVertexAttribArray(normalAttrib)
+	gl.VertexAttribPointerWithOffset(normalAttrib, 2, gl.FLOAT, false, 4*4, 2*4)
 	logError()
 
 	return Buffer(vbo)
@@ -231,6 +271,8 @@ func (p *glPainter) glFreeBuffer(vbo Buffer) {
 }
 
 func (p *glPainter) glDrawTexture(texture Texture, alpha float32) {
+	gl.UseProgram(uint32(p.program))
+
 	// here we have to choose between blending the image alpha or fading it...
 	// TODO find a way to support both
 	if alpha != 1.0 {
@@ -249,10 +291,36 @@ func (p *glPainter) glDrawTexture(texture Texture, alpha float32) {
 	logError()
 }
 
+func (p *glPainter) glDrawLine(width float32, col color.Color, feather float32) {
+	gl.UseProgram(uint32(p.lineProgram))
+
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+	logError()
+
+	colorUniform := gl.GetUniformLocation(uint32(p.lineProgram), gl.Str("color\x00"))
+	r, g, b, a := col.RGBA()
+	if a == 0 {
+		gl.Uniform4f(colorUniform, 0, 0, 0, 0)
+	} else {
+		alpha := float32(a)
+		col := []float32{float32(r) / alpha, float32(g) / alpha, float32(b) / alpha, alpha / 0xffff}
+		gl.Uniform4fv(colorUniform, 1, &col[0])
+	}
+	lineWidthUniform := gl.GetUniformLocation(uint32(p.lineProgram), gl.Str("lineWidth\x00"))
+	gl.Uniform1f(lineWidthUniform, width)
+
+	featherUniform := gl.GetUniformLocation(uint32(p.lineProgram), gl.Str("feather\x00"))
+	gl.Uniform1f(featherUniform, feather)
+	logError()
+
+	gl.DrawArrays(gl.TRIANGLES, 0, 6)
+	logError()
+}
+
 func (p *glPainter) glCapture(width, height int32, pixels *[]uint8) {
 	gl.ReadBuffer(gl.FRONT)
 	logError()
-	gl.ReadPixels(0, 0, int32(width), int32(height), gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(*pixels))
+	gl.ReadPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(*pixels))
 	logError()
 }
 
