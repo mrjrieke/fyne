@@ -607,7 +607,7 @@ func (w *window) processMouseClicked(button desktop.MouseButton, action action, 
 	}
 
 	// Check for double click/tap on left mouse button
-	if action == release && button == desktop.MouseButtonPrimary && !mouseDragStarted {
+	if action == release && button == desktop.MouseButtonPrimary {
 		w.mouseClickedHandleTapDoubleTap(co, ev)
 	}
 }
