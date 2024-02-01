@@ -63,6 +63,13 @@ func (w *window) Resize(size fyne.Size) {
 		w.viewLock.Unlock()
 		w.requestedWidth, w.requestedHeight = width, height
 		w.view().SetSize(width, height)
+
+		xpos, ypos := w.view().GetPos()
+
+		// Also grab the yoffset.
+		_, yoffset, _, _ := w.view().GetFrameSize()
+
+		fyne.CurrentApp().Lifecycle().(*app.Lifecycle).TriggerResized(xpos, ypos, yoffset, width, height)
 	})
 }
 
@@ -158,6 +165,9 @@ func (w *window) doShow() {
 		if !build.IsWayland {
 			w.xpos, w.ypos = view.GetPos()
 		}
+
+		// Also grab the yoffset.
+		_, w.yoffset, _, _ = w.view().GetFrameSize()
 
 		if w.fullScreen { // this does not work if called before viewport.Show()
 			go func() {
@@ -286,6 +296,8 @@ func (w *window) processMoved(x, y int) {
 	if !w.fullScreen { // don't save the move to top left when changing to fullscreen
 		// save coordinates
 		w.xpos, w.ypos = x, y
+		fyne.CurrentApp().Lifecycle().(*app.Lifecycle).TriggerResized(w.xpos, w.ypos, w.yoffset, w.width, w.height)
+
 	}
 
 	if w.canvas.detectedScale == w.detectScale() {
@@ -315,6 +327,13 @@ func (w *window) processResized(width, height int) {
 	}
 
 	w.platformResize(canvasSize)
+
+	xpos, ypos := w.view().GetPos()
+
+	// Also grab the yoffset.
+	_, yoffset, _, _ := w.view().GetFrameSize()
+
+	fyne.CurrentApp().Lifecycle().(*app.Lifecycle).TriggerResized(xpos, ypos, yoffset, width, height)
 }
 
 func (w *window) processFrameSized(width, height int) {
@@ -595,7 +614,7 @@ func (w *window) processMouseClicked(button desktop.MouseButton, action action, 
 	}
 
 	// Check for double click/tap on left mouse button
-	if action == release && button == desktop.MouseButtonPrimary && !mouseDragStarted {
+	if action == release && button == desktop.MouseButtonPrimary {
 		w.mouseClickedHandleTapDoubleTap(co, ev)
 	}
 }

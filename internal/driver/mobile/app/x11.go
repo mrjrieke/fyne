@@ -85,11 +85,13 @@ func GoBack() {
 }
 
 //export onResize
-func onResize(w, h int) {
+func onResize(xpos, ypos int, w, h int) {
 	// TODO(nigeltao): don't assume 72 DPI. DisplayWidth and DisplayWidthMM
 	// is probably the best place to start looking.
 	pixelsPerPt := float32(1)
 	theApp.events.In() <- size.Event{
+		XPos:        xpos,
+		YPos:        ypos,
 		WidthPx:     w,
 		HeightPx:    h,
 		WidthPt:     float32(w),

@@ -281,6 +281,12 @@ func (d *mobileDriver) handlePaint(e paint.Event, w fyne.Window) {
 			w.Resize(newSize)
 		}
 
+		xpos, ypos := fyne.CurrentDevice().GetPos()
+
+		yoffset := 0 // TODO: does this have meaning in mobile?
+
+		fyne.CurrentApp().Lifecycle().(*intapp.Lifecycle).TriggerResized(xpos, ypos, yoffset, d.currentSize.WidthPx, d.currentSize.HeightPx)
+
 		d.paintWindow(w, newSize)
 		d.app.Publish()
 	}

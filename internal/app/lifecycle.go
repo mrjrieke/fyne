@@ -16,6 +16,7 @@ type Lifecycle struct {
 	onBackground atomic.Pointer[func()]
 	onStarted    atomic.Pointer[func()]
 	onStopped    atomic.Pointer[func()]
+	onResized    atomic.Value // [func()]
 
 	onStoppedHookExecuted func()
 }
@@ -50,6 +51,21 @@ func (l *Lifecycle) SetOnStopped(f func()) {
 
 // OnEnteredForeground returns the focus gained hook, if one is registered.
 func (l *Lifecycle) OnEnteredForeground() func() {
+	f := l.onForeground.Load()
+	if f == nil {
+		return nil
+	}
+
+	return *f
+}
+
+// SetOnResized hooks into an event that says the window has been resized.
+func (l *Lifecycle) SetOnResized(f func(xpos int, ypos int, yoffset int, width int, height int)) {
+	l.onResized.Store(f)
+}
+
+// TriggerEnteredForeground will call the focus gained hook, if one is registered.
+func (l *Lifecycle) TriggerEnteredForeground() func() {
 	f := l.onForeground.Load()
 	if f == nil {
 		return nil
@@ -98,5 +114,13 @@ func (l *Lifecycle) OnStopped() func() {
 	return func() {
 		(*stopped)()
 		stopHook()
+	}
+}
+
+// TriggerResized will call the resized hook, if one is registered.
+func (l *Lifecycle) TriggerResized(xpos int, ypos int, yoffset int, width int, height int) {
+	f := l.onResized.Load()
+	if ff, ok := f.(func(xpos int, ypos int, yoffset int, width int, height int)); ok && ff != nil {
+		ff(xpos, ypos, yoffset, width, height)
 	}
 }
