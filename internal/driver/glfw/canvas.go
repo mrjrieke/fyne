@@ -6,6 +6,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/internal"
 	"fyne.io/fyne/v2/internal/app"
 	"fyne.io/fyne/v2/internal/driver"
@@ -119,6 +120,10 @@ func (c *glCanvas) Resize(size fyne.Size) {
 		if p, ok := overlay.(*widget.PopUp); ok {
 			// TODO: remove this when #707 is being addressed.
 			// “Notifies” the PopUp of the canvas size change.
+			//			p.Resize(p.Content.Size().Add(fyne.NewSize(theme.Padding()*2, theme.Padding()*2)))
+			p.Refresh()
+		} else if p, ok := overlay.(*dialog.TickerPopUp); ok {
+			p.Resize(p.Content.Size().Add(fyne.NewSize(theme.Padding()*2, theme.Padding()*2)))
 			p.Refresh()
 		} else {
 			overlay.Resize(nearestSize)

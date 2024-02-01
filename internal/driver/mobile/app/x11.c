@@ -132,7 +132,7 @@ createWindow(void) {
 			continue;
 		}
 		if (ev.type == ConfigureNotify) {
-			onResize(ev.xconfigure.width, ev.xconfigure.height);
+			onResize(ev.xconfigure.x, ev.xconfigure.y, ev.xconfigure.width, ev.xconfigure.height);
 			break;
 		}
 	}
@@ -154,7 +154,7 @@ processEvents(void) {
 			onTouchMove((float)ev.xmotion.x, (float)ev.xmotion.y);
 			break;
 		case ConfigureNotify:
-			onResize(ev.xconfigure.width, ev.xconfigure.height);
+			onResize(ev.xconfigure.x, ev.xconfigure.y, ev.xconfigure.width, ev.xconfigure.height);
 			break;
 		case ClientMessage:
 			if (wm_delete_window != None && (Atom)ev.xclient.data.l[0] == wm_delete_window) {

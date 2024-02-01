@@ -15,6 +15,9 @@ import (
 // Event holds the dimensions, physical resolution and orientation of the app's
 // window.
 type Event struct {
+	// Position of the window.
+	XPos, YPos int
+
 	// WidthPx and HeightPx are the window's dimensions in pixels.
 	WidthPx, HeightPx int
 

@@ -23,3 +23,11 @@ func (*glDevice) HasKeyboard() bool {
 func (*glDevice) IsBrowser() bool {
 	return runtime.GOARCH == "js" || runtime.GOOS == "js"
 }
+
+func (d *glDevice) GetPos() (int, int) {
+	return 0, 0
+}
+
+func (d *glDevice) GetFrameSize() (left, top, right, bottom int) {
+	return 0, 0, 0, 0
+}

@@ -105,6 +105,7 @@ type window struct {
 	menuDeactivationPending fyne.KeyName
 
 	xpos, ypos                      int
+	yoffset                         int
 	width, height                   int
 	requestedWidth, requestedHeight int
 	shouldWidth, shouldHeight       int
@@ -157,6 +158,22 @@ func (w *window) SetOnDropped(dropped func(pos fyne.Position, items []fyne.URI))
 			dropped(w.mousePos, uris)
 		})
 	})
+}
+
+func (w *window) PosResize(xpos int, ypos int, width int, height int) {
+	w.xpos = xpos
+	w.ypos = ypos
+	w.shouldWidth = width
+	w.shouldHeight = height
+	if w.view() != nil {
+		runOnMain(w.doResize)
+	}
+}
+
+func (w *window) doResize() {
+	// set new window coordinates and size
+	w.viewport.SetPos(w.xpos, w.ypos)
+	w.viewport.SetSize(w.shouldWidth, w.shouldHeight)
 }
 
 func (w *window) doCenterOnScreen() {
