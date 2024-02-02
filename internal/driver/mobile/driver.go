@@ -569,6 +569,10 @@ func (d *mobileDriver) DoubleTapDelay() time.Duration {
 	return tapDoubleDelay
 }
 
+func (d *mobileDriver) PosResize(xpos int, ypos int, width int, height int) {
+// no-op
+}
+
 // NewGoMobileDriver sets up a new Driver instance implemented using the Go
 // Mobile extension and OpenGL bindings.
 func NewGoMobileDriver() fyne.Driver {
