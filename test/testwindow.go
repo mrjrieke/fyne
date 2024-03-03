@@ -81,6 +81,10 @@ func (w *testWindow) RequestFocus() {
 	w.focused = true
 }
 
+func (w *testWindow) PosResize(xpos int, ypos int, width int, height int) {
+	// TODO: implement
+}
+
 func (w *testWindow) Resize(size fyne.Size) {
 	w.canvas.Resize(size)
 }

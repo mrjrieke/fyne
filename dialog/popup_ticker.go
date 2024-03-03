@@ -8,6 +8,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/driver/mobile"
 	"fyne.io/fyne/v2/internal/widget"
 	"fyne.io/fyne/v2/theme"
 	commonwidget "fyne.io/fyne/v2/widget"
@@ -87,6 +88,7 @@ var charSizeCache = map[string]*fyne.Size{}
 
 type PopupTickerListener interface {
 	TapCallback(fyne.Tappable, *fyne.PointEvent)
+	TouchCallback(fyne.Tappable, *mobile.TouchEvent)
 }
 
 func (rb *ringBuffer) Init(start int, data []rune) {
@@ -363,11 +365,11 @@ func (rb *ringBuffer) Length() int {
 type TickerPopUp struct {
 	commonwidget.BaseWidget
 
-	Content          fyne.CanvasObject
-	Canvas           fyne.Canvas
+	Content fyne.CanvasObject
+	Canvas  fyne.Canvas
 
 	Id               uint32
-	RouteProvider    func(string)[]uint32
+	RouteProvider    func(string) []uint32
 	CurrentSelection string
 
 	// EventRouter is a router of touch events.
@@ -389,7 +391,6 @@ type TickerPopUp struct {
 	dragScale           int
 	dsCount             int
 }
-
 
 func (p *TickerPopUp) GetId() uint32 {
 	return p.Id
@@ -419,7 +420,9 @@ func (p *TickerPopUp) Move(pos fyne.Position) {
 	if p.modal {
 		return
 	}
-	p.innerPos = pos
+	if pos.X != 0 && pos.Y != 0 {
+		p.innerPos = pos
+	}
 	p.Refresh()
 }
 
@@ -474,7 +477,14 @@ func (p *TickerPopUp) DragEnd() {
 
 	// Calculate distance moved at end of a drag.
 	d := p.draggedX.Position.X - p.draggedXPrev.Position.X
-	da := p.draggedX.AbsolutePosition.X - p.draggedXPrev.AbsolutePosition.X
+	posX := p.draggedX.AbsolutePosition.X
+	prevPosX := p.draggedXPrev.AbsolutePosition.X
+	if posX == 0 && prevPosX == 0 {
+		posX = p.draggedX.Position.X
+		prevPosX = p.draggedXPrev.Position.X
+	}
+
+	da := posX - prevPosX
 	if da == 0 {
 		return
 	}
@@ -572,6 +582,79 @@ func (p *TickerPopUp) Tapped(e *fyne.PointEvent) {
 func (p *TickerPopUp) DoubleTapped(e *fyne.PointEvent) {
 }
 
+// TouchDown is called when this entry gets a touch down event on mobile device, we ensure we have focus.
+//
+// Since: 2.1
+//
+// Implements: mobile.Touchable
+func (p *TickerPopUp) TouchDown(e *mobile.TouchEvent) {
+	// now := time.Now().UnixMilli()
+	// if !p.Disabled() {
+	// 	e.requestFocus()
+	// }
+	// if e.isTripleTap(now) {
+	// 	e.selectCurrentRow()
+	// 	return
+	// }
+
+	// if e.AbsolutePosition.X < p.innerPos.X || e.AbsolutePosition.Y < p.innerPos.Y || e.AbsolutePosition.X > (p.innerPos.X+p.innerSize.Width) || e.AbsolutePosition.Y > (p.innerPos.Y+p.innerSize.Height) {
+	// 	p.CurrentSelection = ""
+	// 	if !p.EventRouter.IsDragging() {
+	// 		if p.Visible() {
+	// 			p.Hide()
+	// 		} else {
+	// 			p.Show()
+	// 		}
+	// 	}
+	// 	return
+	// }
+	// if p.dragging != DragInterrupted && p.dragging != DragFinished {
+	// 	p.dragging = DragFinished
+	// 	return
+	// }
+
+	// if p.popupTickerListener != nil {
+	// 	p.GetSelectedByPosition(&e.AbsolutePosition)
+	// 	p.popupTickerListener.TouchCallback(p, e)
+	// }
+}
+
+// TouchUp is called when this entry gets a touch up event on mobile device.
+//
+// Since: 2.1
+//
+// Implements: mobile.Touchable
+func (p *TickerPopUp) TouchUp(e *mobile.TouchEvent) {
+	// if e.AbsolutePosition.X < p.innerPos.X || e.AbsolutePosition.Y < p.innerPos.Y || e.AbsolutePosition.X > (p.innerPos.X+p.innerSize.Width) || e.AbsolutePosition.Y > (p.innerPos.Y+p.innerSize.Height) {
+	// 	p.CurrentSelection = ""
+	// 	if !p.EventRouter.IsDragging() {
+	// 		if p.Visible() {
+	// 			p.Hide()
+	// 		} else {
+	// 			p.Show()
+	// 		}
+	// 	}
+	// 	return
+	// }
+	// if p.dragging != DragInterrupted && p.dragging != DragFinished {
+	// 	p.dragging = DragFinished
+	// 	return
+	// }
+
+	// if p.popupTickerListener != nil {
+	// 	p.GetSelectedByPosition(&e.AbsolutePosition)
+	// 	p.popupTickerListener.TouchCallback(p, e)
+	// }
+}
+
+// TouchCancel is called when this entry gets a touch cancel event on mobile device (app was removed from focus).
+//
+// Since: 2.1
+//
+// Implements: mobile.Touchable
+func (p *TickerPopUp) TouchCancel(*mobile.TouchEvent) {
+}
+
 func (p *TickerPopUp) endOffset() float32 {
 	return p.innerPos.X + theme.Padding()
 }
@@ -617,11 +700,11 @@ func (p *TickerPopUp) GetSelected(e *fyne.PointEvent) string {
 	// Notify router of a selection
 	if selection != "" {
 		contentEvent := ContentEvent{
-			SourceWidgetId: p.Id,
+			SourceWidgetId:       p.Id,
 			DestinationWidgetIds: p.RouteProvider(ItemSelectedRequest),
-			ContentAction: ItemSelectedRequest,
-			ContentType:   TickerContent,
-			Content:       &TextStack{},
+			ContentAction:        ItemSelectedRequest,
+			ContentType:          TickerContent,
+			Content:              &TextStack{},
 		}
 		contentEvent.Content.Body.WriteString(selection)
 		p.EventRouter.ContentChanged(&contentEvent)
@@ -641,9 +724,9 @@ func (p *TickerPopUp) GetSelectedByPosition(absolutePos *fyne.Position) string {
 	// Update fact that content is about to change, so refresh selection stack.
 	contentEvent := ContentEvent{
 		SourceWidgetId: p.Id,
-		ContentAction: RefreshTickerContent,
-		ContentType:   TickerContent,
-		Content:       &TextStack{},
+		ContentAction:  RefreshTickerContent,
+		ContentType:    TickerContent,
+		Content:        &TextStack{},
 	}
 	contentRunes := p.rb.Data(true)
 	for i := 0; i < len(contentRunes); i++ {
@@ -701,8 +784,14 @@ func (p *TickerPopUp) DraggedHelper(e *fyne.DragEvent) int {
 		p.draggedTime = time.Now()
 		return 0
 	}
+	posX := e.AbsolutePosition.X
+	posY := e.AbsolutePosition.Y
+	if posX == 0 && posY == 0 {
+		posX = e.Position.X
+		posY = e.Position.Y
+	}
 
-	if (e.AbsolutePosition.X < p.innerPos.X) || e.AbsolutePosition.Y < p.innerPos.Y || (e.AbsolutePosition.X > (p.innerPos.X + p.innerSize.Width)) || e.AbsolutePosition.Y > (p.innerPos.Y+p.innerSize.Height) {
+	if (posX < p.innerPos.X) || posY < p.innerPos.Y || (posX > (p.innerPos.X + p.innerSize.Width)) || posY > (p.innerPos.Y+p.innerSize.Height) {
 		if p.dragging == DragInterrupted {
 			p.Hide()
 		}
@@ -749,7 +838,17 @@ func (p *TickerPopUp) DraggedHelper(e *fyne.DragEvent) int {
 }
 
 func (p *TickerPopUp) Dragged(e *fyne.DragEvent) {
-	if !p.Visible() || e.AbsolutePosition.X < p.innerPos.X || e.AbsolutePosition.Y < p.innerPos.Y || e.AbsolutePosition.X > (p.innerPos.X+p.innerSize.Width) || e.AbsolutePosition.Y > (p.innerPos.Y+p.innerSize.Height) {
+	posX := e.AbsolutePosition.X
+	posY := e.AbsolutePosition.Y
+	if posX == 0 && posY == 0 {
+		posX = e.Position.X
+		posY = e.Position.Y
+	}
+	if !p.Visible() ||
+		posX < p.innerPos.X ||
+		posY < p.innerPos.Y ||
+		posX > (p.innerPos.X+p.innerSize.Width) ||
+		posY > (p.innerPos.Y+p.innerSize.Height) {
 		// Handled hints outside of our bounds
 		return
 	}
@@ -766,7 +865,27 @@ func (p *TickerPopUp) Dragged(e *fyne.DragEvent) {
 }
 
 // TappedSecondary is called when the user right/alt taps the background - if not modal then dismiss this widget
-func (p *TickerPopUp) TappedSecondary(_ *fyne.PointEvent) {
+func (p *TickerPopUp) TappedSecondary(e *fyne.PointEvent) {
+	if e.AbsolutePosition.X < p.innerPos.X || e.AbsolutePosition.Y < p.innerPos.Y || e.AbsolutePosition.X > (p.innerPos.X+p.innerSize.Width) || e.AbsolutePosition.Y > (p.innerPos.Y+p.innerSize.Height) {
+		p.CurrentSelection = ""
+		if !p.EventRouter.IsDragging() {
+			if p.Visible() {
+				//			p.Hide()
+			} else {
+				p.Show()
+			}
+		}
+		return
+	}
+	if p.dragging != DragInterrupted && p.dragging != DragFinished {
+		p.dragging = DragFinished
+		return
+	}
+
+	if p.popupTickerListener != nil {
+		p.GetSelectedByPosition(&e.AbsolutePosition)
+		p.popupTickerListener.TapCallback(p, e)
+	}
 	if !p.modal {
 		//		p.Hide()
 	}
@@ -807,7 +926,7 @@ func (p *TickerPopUp) Animate() {
 // It will then display the popup on the passed canvas.
 //
 // Deprecated: Use ShowTickerPopUpAtPosition() instead.
-func NewTickerPopUpAtPosition(scrollMode ScrollMode, content fyne.CanvasObject, canvas fyne.Canvas, popupTickerListener PopupTickerListener, pos fyne.Position, size fyne.Size, fontSize float32, separator rune, entryPadding float32, dragStyle DragStyle, routeProvider func(string)[]uint32) *TickerPopUp {
+func NewTickerPopUpAtPosition(scrollMode ScrollMode, content fyne.CanvasObject, canvas fyne.Canvas, popupTickerListener PopupTickerListener, pos fyne.Position, size fyne.Size, fontSize float32, separator rune, entryPadding float32, dragStyle DragStyle, routeProvider func(string) []uint32) *TickerPopUp {
 	p := newTickerPopUp(scrollMode, content, canvas, popupTickerListener, size, fontSize, separator, entryPadding, dragStyle, routeProvider)
 	p.ShowAtPosition(pos)
 	return p
@@ -815,11 +934,11 @@ func NewTickerPopUpAtPosition(scrollMode ScrollMode, content fyne.CanvasObject, 
 
 // ShowTickerPopUpAtPosition creates a new tickerPopUp for the specified content at the specified absolute position.
 // It will then display the popup on the passed canvas.
-func ShowTickerPopUpAtPosition(scrollMode ScrollMode, content fyne.CanvasObject, canvas fyne.Canvas, pos fyne.Position, popupTickerListener PopupTickerListener, size fyne.Size, fontSize float32, separator rune, entryPadding float32, dragStyle DragStyle, routeProvider func(string)[]uint32) {
+func ShowTickerPopUpAtPosition(scrollMode ScrollMode, content fyne.CanvasObject, canvas fyne.Canvas, pos fyne.Position, popupTickerListener PopupTickerListener, size fyne.Size, fontSize float32, separator rune, entryPadding float32, dragStyle DragStyle, routeProvider func(string) []uint32) {
 	newTickerPopUp(scrollMode, content, canvas, popupTickerListener, size, fontSize, separator, entryPadding, dragStyle, routeProvider).ShowAtPosition(pos)
 }
 
-func newTickerPopUp(scrollMode ScrollMode, content fyne.CanvasObject, canvas fyne.Canvas, popupTickerListener PopupTickerListener, size fyne.Size, fontSize float32, separator rune, entryPadding float32, dragStyle DragStyle, routeProvider func(string)[]uint32) *TickerPopUp {
+func newTickerPopUp(scrollMode ScrollMode, content fyne.CanvasObject, canvas fyne.Canvas, popupTickerListener PopupTickerListener, size fyne.Size, fontSize float32, separator rune, entryPadding float32, dragStyle DragStyle, routeProvider func(string) []uint32) *TickerPopUp {
 	rb := ringBuffer{ScrollMode: scrollMode, start: 0, labelFontSize: fontSize, width: size.Width, dragStyle: dragStyle, SeparatorRune: separator, entryPadding: entryPadding}
 
 	// TODO: would be nice if Label and Entry implemented GetText() and TextStyle().  Then remove switch and access directly.
@@ -849,12 +968,12 @@ func newTickerPopUp(scrollMode ScrollMode, content fyne.CanvasObject, canvas fyn
 // NewTickerPopUp creates a new tickerPopUp for the specified content and displays it on the passed canvas.
 //
 // Deprecated: This will no longer show the pop-up in 2.0. Use ShowTickerPopUp() instead.
-func NewTickerPopUp(scrollMode ScrollMode, content fyne.CanvasObject, canvas fyne.Canvas, popupTickerListener PopupTickerListener, size fyne.Size, fontSize float32, separator rune, entryPadding float32, dragStyle DragStyle, routeProvider func(string)[]uint32) *TickerPopUp {
+func NewTickerPopUp(scrollMode ScrollMode, content fyne.CanvasObject, canvas fyne.Canvas, popupTickerListener PopupTickerListener, size fyne.Size, fontSize float32, separator rune, entryPadding float32, dragStyle DragStyle, routeProvider func(string) []uint32) *TickerPopUp {
 	return NewTickerPopUpAtPosition(scrollMode, content, canvas, popupTickerListener, fyne.NewPos(0, 0), size, fontSize, separator, entryPadding, dragStyle, routeProvider)
 }
 
 // ShowTickerPopUp creates a new tickerPopUp for the specified content and displays it on the passed canvas.
-func ShowTickerPopUp(scrollMode ScrollMode, content fyne.CanvasObject, canvas fyne.Canvas, popupTickerListener PopupTickerListener, size fyne.Size, fontSize float32, separator rune, entryPadding float32, dragStyle DragStyle, routeProvider func(string)[]uint32) {
+func ShowTickerPopUp(scrollMode ScrollMode, content fyne.CanvasObject, canvas fyne.Canvas, popupTickerListener PopupTickerListener, size fyne.Size, fontSize float32, separator rune, entryPadding float32, dragStyle DragStyle, routeProvider func(string) []uint32) {
 	newTickerPopUp(scrollMode, content, canvas, popupTickerListener, size, fontSize, separator, entryPadding, dragStyle, routeProvider).Show()
 }
 
