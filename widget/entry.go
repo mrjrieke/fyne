@@ -572,10 +572,11 @@ func (e *Entry) Append(text string) {
 // device-specific callbacks (MouseDown() and TouchDown()).
 //
 // Implements: fyne.Tappable
-func (e *Entry) Tapped(ev *fyne.PointEvent) {
+func (e *Entry) Tapped(pe *fyne.PointEvent) {
 	if fyne.CurrentDevice().IsMobile() && e.selecting {
 		e.selecting = false
 	}
+	e.updateMousePointer(pe.Position, false)
 }
 
 // TappedSecondary is called when right or alternative tap is invoked.

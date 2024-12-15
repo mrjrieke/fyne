@@ -97,6 +97,10 @@ func (w *window) Resize(size fyne.Size) {
 	w.canvas.Resize(size)
 }
 
+func (w *window) PosResize(xpos int, ypos int, width int, height int) {
+	// no-op
+}
+
 func (w *window) SetContent(obj fyne.CanvasObject) {
 	w.Canvas().SetContent(obj)
 }

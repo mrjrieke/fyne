@@ -46,6 +46,10 @@ func (w *window) Resize(size fyne.Size) {
 	w.Canvas().(*canvas).Resize(size)
 }
 
+func (w *window) PosResize(xpos int, ypos int, width int, height int) {
+	// no-op
+}
+
 func (w *window) RequestFocus() {
 	// no-op - we cannot change which window is focused
 }

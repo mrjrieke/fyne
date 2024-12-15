@@ -17,10 +17,12 @@ type Text struct {
 	baseObject
 	Alignment fyne.TextAlign // The alignment of the text content
 
-	Color     color.Color    // The main text draw color
-	Text      string         // The string content of this Text
-	TextSize  float32        // Size of the text - if the Canvas scale is 1.0 this will be equivalent to point size
-	TextStyle fyne.TextStyle // The style of the text content
+	Color           color.Color    // The main text draw color
+	Text            string         // The string content of this Text
+	TextSize        float32        // Size of the text - if the Canvas scale is 1.0 this will be equivalent to point size
+	TextStyle       fyne.TextStyle // The style of the text content
+	TextSizeCache   *fyne.Size
+	EnableTextCache bool
 
 	// FontSource defines a resource that can be used instead of the theme for looking up the font.
 	// When a font source is set the `TextStyle` may not be effective, as it will be limited to the styles
@@ -40,8 +42,11 @@ func (t *Text) Hide() {
 // MinSize returns the minimum size of this text object based on its font size and content.
 // This is normally determined by the render implementation.
 func (t *Text) MinSize() fyne.Size {
-	s, _ := fyne.CurrentApp().Driver().RenderedTextSize(t.Text, t.TextSize, t.TextStyle, t.FontSource)
-	return s
+	if !t.EnableTextCache || t.TextSizeCache == nil {
+		s, _ := fyne.CurrentApp().Driver().RenderedTextSize(t.Text, t.TextSize, t.TextStyle, t.FontSource)
+		t.TextSizeCache = &s
+	}
+	return *t.TextSizeCache
 }
 
 // Move the text to a new position, relative to its parent / canvas

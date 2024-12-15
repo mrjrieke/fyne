@@ -38,22 +38,22 @@ func watchFile(path string, callback func()) *fsnotify.Watcher {
 		return nil
 	}
 
-	go func() {
-		for event := range watcher.Events {
+	go func(w *fsnotify.Watcher, p string) {
+		for event := range w.Events {
 			if event.Op.Has(fsnotify.Remove) { // if it was deleted then watch again
-				watcher.Remove(path) // fsnotify returns false positives, see https://github.com/fsnotify/fsnotify/issues/268
+				w.Remove(p) // fsnotify returns false positives, see https://github.com/fsnotify/fsnotify/issues/268
 
-				watchFileAddTarget(watcher, path)
+				watchFileAddTarget(w, p)
 			} else {
 				callback()
 			}
 		}
 
-		err = watcher.Close()
+		err = w.Close()
 		if err != nil {
 			fyne.LogError("Settings un-watch error:", err)
 		}
-	}()
+	}(watcher, path)
 
 	watchFileAddTarget(watcher, path)
 	return watcher

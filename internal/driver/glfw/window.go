@@ -168,14 +168,16 @@ func (w *window) doShow() {
 			w.xpos, w.ypos = view.GetPos()
 		}
 
+		// Also grab the yoffset.
+		_, w.yoffset, _, _ = w.view().GetFrameSize()
+
 		if w.fullScreen { // this does not work if called before viewport.Show()
 			go func() {
 				time.Sleep(time.Millisecond * 100)
 				w.SetFullScreen(true)
 			}()
 		} else {
-			_, yoffset, _, _ := w.view().GetFrameSize()
-			fyne.CurrentApp().Lifecycle().(*app.Lifecycle).OnResized(w.xpos, w.ypos, yoffset, w.width, w.height)
+			fyne.CurrentApp().Lifecycle().(*app.Lifecycle).OnResized(w.xpos, w.ypos, w.yoffset, w.width, w.height)
 		}
 	})
 

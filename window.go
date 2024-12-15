@@ -35,6 +35,9 @@ type Window interface {
 	// the Window object is currently positioned on.
 	CenterOnScreen()
 
+	// PosResize positions and resizes as window.
+	PosResize(xpos int, ypos int, width int, height int)
+
 	// Padded, normally true, states whether the window should have inner
 	// padding so that components do not touch the window edge.
 	Padded() bool
