@@ -286,6 +286,9 @@ func (d *driver) handlePaint(e paint.Event, w *window) {
 		} else { // if screen changed
 			w.Resize(newSize)
 		}
+		xpos, ypos := fyne.CurrentDevice().GetPos()
+		_, yoffset, _, _ := fyne.CurrentDevice().GetFrameSize()
+		fyne.CurrentApp().Lifecycle().(*intapp.Lifecycle).OnResized(xpos, ypos, yoffset, d.currentSize.WidthPx, d.currentSize.HeightPx)
 
 		d.paintWindow(w, newSize)
 		d.app.Publish()

@@ -35,3 +35,11 @@ func (d *device) Locale() fyne.Locale {
 func (*device) IsBrowser() bool {
 	return runtime.GOARCH == "js" || runtime.GOOS == "js"
 }
+
+func (*device) GetPos() (int, int) {
+	return 0, 0
+}
+
+func (*device) GetFrameSize() (left, top, right, bottom int) {
+	return 0, 0, 0, 0
+}

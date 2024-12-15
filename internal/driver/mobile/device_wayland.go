@@ -10,6 +10,10 @@ func (*device) SystemScaleForWindow(_ fyne.Window) float32 {
 	return 1 // PinePhone simplification, our only wayland mobile currently
 }
 
+func (d *device) GetPos() (int, int) {
+	return d.safeTop, d.safeLeft
+}
+
 func setDisableScreenBlank(_ bool) {
 	// ignore in mobile simulation mode
 }

@@ -36,6 +36,8 @@ type Device interface {
 	//
 	// Since: 2.5
 	Locale() Locale
+	GetPos() (int, int)
+	GetFrameSize() (int, int, int, int)
 }
 
 // CurrentDevice returns the device information for the current hardware (via the driver)

@@ -66,7 +66,7 @@ func windowScreen(_ fyne.Window) fyne.CanvasObject {
 	if drv, ok := drv.(desktop.Driver); ok {
 		windowGroup.Objects = append(windowGroup.Objects,
 			widget.NewButton("Splash Window (only use on start)", func() {
-				w := drv.CreateSplashWindow()
+				w := drv.CreateSplashWindow(true)
 				w.SetContent(widget.NewLabelWithStyle("Hello World!\n\nMake a splash!",
 					fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
 				w.Show()

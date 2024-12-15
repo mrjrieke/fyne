@@ -69,7 +69,7 @@ func TestGLDriver_CreateWindow_EmptyTitle(t *testing.T) {
 
 func TestGLDriver_CreateSplashWindow(t *testing.T) {
 	d := NewGLDriver()
-	w := d.CreateSplashWindow().(*window)
+	w := d.CreateSplashWindow(false).(*window)
 	w.create()
 
 	// Verify that the glfw driver implements desktop.Driver.

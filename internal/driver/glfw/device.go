@@ -17,6 +17,14 @@ func (*glDevice) Locale() fyne.Locale {
 	return lang.SystemLocale()
 }
 
+func (*glDevice) GetPos() (int, int) {
+	return 0, 0
+}
+
+func (*glDevice) GetFrameSize() (left, top, right, bottom int) {
+	return 0, 0, 0, 0
+}
+
 func (*glDevice) Orientation() fyne.DeviceOrientation {
 	return fyne.OrientationHorizontalLeft // TODO should we consider the monitor orientation or topmost window?
 }

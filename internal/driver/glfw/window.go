@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/internal/app"
+	intapp "fyne.io/fyne/v2/internal/app"
 	"fyne.io/fyne/v2/internal/build"
 	"fyne.io/fyne/v2/internal/cache"
 	"fyne.io/fyne/v2/internal/driver"
@@ -67,6 +68,9 @@ func (w *window) Resize(size fyne.Size) {
 		w.requestedWidth, w.requestedHeight = width, height
 		if runtime.GOOS != "js" {
 			w.view().SetSize(width, height)
+			xpos, ypos := w.view().GetPos()
+			_, yoffset, _, _ := w.view().GetFrameSize()
+			fyne.CurrentApp().Lifecycle().(*intapp.Lifecycle).OnResized(xpos, ypos, yoffset, width, height)
 		}
 	})
 }
@@ -169,6 +173,9 @@ func (w *window) doShow() {
 				time.Sleep(time.Millisecond * 100)
 				w.SetFullScreen(true)
 			}()
+		} else {
+			_, yoffset, _, _ := w.view().GetFrameSize()
+			fyne.CurrentApp().Lifecycle().(*app.Lifecycle).OnResized(w.xpos, w.ypos, yoffset, w.width, w.height)
 		}
 	})
 
@@ -291,6 +298,7 @@ func (w *window) processMoved(x, y int) {
 	if !w.fullScreen { // don't save the move to top left when changing to fullscreen
 		// save coordinates
 		w.xpos, w.ypos = x, y
+		fyne.CurrentApp().Lifecycle().(*app.Lifecycle).OnResized(w.xpos, w.ypos, w.yoffset, w.width, w.height)
 	}
 
 	if w.canvas.detectedScale == w.detectScale() {
@@ -320,6 +328,12 @@ func (w *window) processResized(width, height int) {
 	}
 
 	w.platformResize(canvasSize)
+
+	xpos, ypos := w.view().GetPos()
+	_, yoffset, _, _ := w.view().GetFrameSize()
+
+	fyne.CurrentApp().Lifecycle().(*app.Lifecycle).OnResized(xpos, ypos, yoffset, width, height)
+
 }
 
 func (w *window) processFrameSized(width, height int) {
@@ -950,7 +964,7 @@ func (w *window) runOnMainWhenCreated(fn func()) {
 
 func (d *gLDriver) CreateWindow(title string) fyne.Window {
 	if runtime.GOOS != "js" {
-		return d.createWindow(title, true)
+		return d.createWindow(title, true, false)
 	}
 
 	// handling multiple windows by overlaying on the root for web
@@ -967,7 +981,7 @@ func (d *gLDriver) CreateWindow(title string) fyne.Window {
 	d.windowLock.RUnlock()
 
 	if !hasVisible {
-		return d.createWindow(title, true)
+		return d.createWindow(title, true, false)
 	}
 
 	c := root.Canvas().(*glCanvas)
@@ -983,7 +997,7 @@ func (d *gLDriver) CreateWindow(title string) fyne.Window {
 	return wrapInnerWindow(inner, root, d)
 }
 
-func (d *gLDriver) createWindow(title string, decorate bool) fyne.Window {
+func (d *gLDriver) createWindow(title string, decorate bool, floating bool) fyne.Window {
 	var ret *window
 	if title == "" {
 		title = defaultTitle
@@ -991,7 +1005,7 @@ func (d *gLDriver) createWindow(title string, decorate bool) fyne.Window {
 	runOnMain(func() {
 		d.initGLFW()
 
-		ret = &window{title: title, decorate: decorate, driver: d}
+		ret = &window{title: title, decorate: decorate, floating: floating, driver: d}
 		// This queue is destroyed when the window is closed.
 		ret.InitEventQueue()
 		go ret.RunEventQueue()
@@ -1033,8 +1047,8 @@ func (w *window) isClosing() bool {
 	return closing
 }
 
-func (d *gLDriver) CreateSplashWindow() fyne.Window {
-	win := d.createWindow("", false)
+func (d *gLDriver) CreateSplashWindow(floating bool) fyne.Window {
+	win := d.createWindow("", false, floating)
 	win.SetPadded(false)
 	win.CenterOnScreen()
 	return win

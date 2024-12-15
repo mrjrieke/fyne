@@ -67,6 +67,7 @@ type window struct {
 	viewLock   sync.RWMutex
 	createLock sync.Once
 	decorate   bool
+	floating   bool
 	closing    bool
 	fixedSize  bool
 
@@ -104,6 +105,7 @@ type window struct {
 	menuDeactivationPending fyne.KeyName
 
 	xpos, ypos                      int
+	yoffset                         int
 	width, height                   int
 	requestedWidth, requestedHeight int
 	shouldWidth, shouldHeight       int
@@ -748,6 +750,9 @@ func (w *window) create() {
 		if err != nil {
 			w.driver.initFailed("window creation error", err)
 			return
+		}
+		if w.floating {
+			win.SetAttrib(glfw.Floating, 1)
 		}
 
 		w.viewLock.Lock()

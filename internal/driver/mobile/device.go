@@ -24,6 +24,14 @@ func (*device) Locale() fyne.Locale {
 	return lang.SystemLocale()
 }
 
+func (d *device) GetPos() (int, int) {
+	return d.safeTop, d.safeLeft
+}
+
+func (*device) GetFrameSize() (left, top, right, bottom int) {
+	return 0, 0, 0, 0
+}
+
 func (*device) Orientation() fyne.DeviceOrientation {
 	switch currentOrientation {
 	case size.OrientationLandscape:
