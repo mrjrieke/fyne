@@ -113,6 +113,9 @@ func (l *Lifecycle) OnStopped() func() {
 // OnResized will call the resized hook, if one is registered.
 func (l *Lifecycle) OnResized(xpos int, ypos int, yoffset int, width int, height int) {
 	f := l.onResized.Load()
+	if f == nil {
+		return
+	}
 	(*f)(xpos, ypos, yoffset, width, height)
 }
 
