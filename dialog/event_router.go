@@ -19,51 +19,51 @@ const (
 )
 
 const (
-	TickerContent        string = "TickerContent"
-	TickerSearchContent  string = "TickerSearchContent"
-	SearchQueryContent   string = "SearchQueryContent"
-	PageContent          string = "PageContent"
+	TickerContent       string = "TickerContent"
+	TickerSearchContent string = "TickerSearchContent"
+	SearchQueryContent  string = "SearchQueryContent"
+	PageContent         string = "PageContent"
 )
 
 type TagType int
 
 type TextTag struct {
-	LeaderIndex int
+	LeaderIndex  int
 	ContentIndex int
-	TagLength   int // Optional -- some tag values are in the text already like CharacterQuote
-	TagValue   string
-	TagType    TagType
+	TagLength    int // Optional -- some tag values are in the text already like CharacterQuote
+	TagValue     string
+	TagType      TagType
 }
 
 // TextStack is a search result returned by the search engine.
 type TextStack struct {
-	Body     strings.Builder
+	Body     *strings.Builder
 	TextTags []TextTag
 }
 
 type SearchEnvelope struct {
-	SearchQuery string
-	QueryType   string
+	SearchQuery    string
+	QueryType      string
 	SelectionStack []string // Stack of selections
-	                        // This is a sort of context of entries the user
-							// has selected in the drilldown.
-//	SelectionDepth int // Indicates current user 'selection level'  0 is top
+	// This is a sort of context of entries the user
+	// has selected in the drilldown.
+	//	SelectionDepth int // Indicates current user 'selection level'  0 is top
 	SearchResult *TextStack
 }
 
 // ContentEvent defines the parameters of a content event
 type ContentEvent struct {
-	SourceWidgetId  uint32
+	SourceWidgetId       uint32
 	DestinationWidgetIds []uint32
-	ContentAction string
-	ContentType   string
-	Content       *TextStack
+	ContentAction        string
+	ContentType          string
+	Content              *TextStack
 }
 
 // ContentEvent defines the parameters of a content event
 type TiniPointEvent struct {
-	PointEvent *fyne.PointEvent
-	SourceWidgetId  uint32
+	PointEvent           *fyne.PointEvent
+	SourceWidgetId       uint32
 	DestinationWidgetIds []uint32
 }
 

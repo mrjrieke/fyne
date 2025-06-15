@@ -3,6 +3,7 @@ package dialog
 import (
 	"image/color"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -704,7 +705,7 @@ func (p *TickerPopUp) GetSelected(e *fyne.PointEvent) string {
 			DestinationWidgetIds: p.RouteProvider(ItemSelectedRequest),
 			ContentAction:        ItemSelectedRequest,
 			ContentType:          TickerContent,
-			Content:              &TextStack{},
+			Content:              &TextStack{Body: &strings.Builder{}},
 		}
 		contentEvent.Content.Body.WriteString(selection)
 		p.EventRouter.ContentChanged(&contentEvent)
@@ -726,7 +727,7 @@ func (p *TickerPopUp) GetSelectedByPosition(absolutePos *fyne.Position) string {
 		SourceWidgetId: p.Id,
 		ContentAction:  RefreshTickerContent,
 		ContentType:    TickerContent,
-		Content:        &TextStack{},
+		Content:        &TextStack{Body: &strings.Builder{}},
 	}
 	contentRunes := p.rb.Data(true)
 	for i := 0; i < len(contentRunes); i++ {
